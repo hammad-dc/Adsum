@@ -66,14 +66,10 @@ export default function TeacherDashboard({
   const renderClassItem = ({ item }: any) => {
     const status = getStatusColor(item.is_active);
 
-    // --- THE FIX: Check ALL possible name locations ---
-    // 1. Try the direct text column (New way)
-    // 2. Try the linked subject relation (Old way)
-    // 3. Fallback to "Untitled"
+    // 1. Calculate Name & Room FIRST
     const displayName =
       item.class_name || item.subjects?.name || 'Untitled Class';
     const displayRoom = item.room_number || 'Room TBD';
-
     const timeString = new Date(item.created_at).toLocaleTimeString([], {
       hour: '2-digit',
       minute: '2-digit',
@@ -81,6 +77,7 @@ export default function TeacherDashboard({
 
     return (
       <View style={styles.card}>
+        {/* Card Header Info */}
         <View style={styles.cardHeader}>
           <View style={{ flex: 1 }}>
             <Text style={styles.className}>{displayName}</Text>
@@ -102,6 +99,7 @@ export default function TeacherDashboard({
           </View>
         </View>
 
+        {/* Action Button */}
         <TouchableOpacity
           style={[
             styles.actionButton,
@@ -115,11 +113,11 @@ export default function TeacherDashboard({
             onSelectClass &&
             onSelectClass({
               id: item.id,
-              name: displayName,
-              room: displayRoom,
+              name: displayName, // Use the calculated name
+              room: displayRoom, // Use the calculated room
               beacon_id: item.beacon_id,
               active_code: item.active_code,
-              totalStudents: 0,
+              is_active: item.is_active, // <--- This is the Critical Fix we needed
             })
           }
         >

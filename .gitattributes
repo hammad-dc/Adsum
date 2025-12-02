@@ -1,0 +1,22 @@
+# Use LF for all text files
+* text=auto eol=lf
+
+# Explicitly enforce LF for important RN files
+*.js    text eol=lf
+*.jsx   text eol=lf
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.json  text eol=lf
+*.xml   text eol=lf
+*.gradle text eol=lf
+*.sh    text eol=lf
+*.md    text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+
+# Prevent binary files from being touched
+*.png binary
+*.jpg binary
+*.mp4 binary
+*.keystore binary
+*.a binary

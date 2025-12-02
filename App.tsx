@@ -12,6 +12,8 @@ import MarkAttendance from './src/MarkAttendance';
 import AddNewClass from './src/AddNewClass';
 import AttendanceHistory from './src/AttendanceHistory';
 import Profile from './src/Profile';
+import LiveAttendanceView from './src/LiveAttendanceView';
+import ManualOverride from './src/ManualOverride';
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -59,32 +61,56 @@ export default function App() {
   // -------------------------------------------
   // TEACHER FLOW
   // -------------------------------------------
+  // -------------------------------------------
+  // TEACHER FLOW
+  // -------------------------------------------
   if (isTeacher) {
-    // Screen: Create New Class
+    // 1. Create New Class
     if (currentScreen === 'add-class') {
       return (
         <AddNewClass
           onBack={goHome}
           onClassCreated={(newClass: any) => {
             console.log('New Class Created:', newClass);
-            // In real app, we would refresh the dashboard list here
             goHome();
           }}
         />
       );
     }
 
-    // Screen: Start Active Session
+    // 2. Start Active Session (The Timer Screen)
     if (currentScreen === 'start-session' && selectedData) {
       return <StartSession classSession={selectedData} onBack={goHome} />;
     }
 
-    // Screen: Profile (Shared)
+    // 3. Live View (Teacher sees students popping up)
+    if (currentScreen === 'live-view' && selectedData) {
+      return (
+        <LiveAttendanceView
+          classSession={selectedData}
+          onBack={goHome}
+          onManualOverride={() => setCurrentScreen('manual-override')}
+        />
+      );
+    }
+
+    // 4. Manual Override (Teacher marks student)
+    if (currentScreen === 'manual-override' && selectedData) {
+      return (
+        <ManualOverride
+          classSession={selectedData}
+          onBack={() => setCurrentScreen('live-view')}
+          onComplete={() => setCurrentScreen('live-view')}
+        />
+      );
+    }
+
+    // 5. Profile (Shared)
     if (currentScreen === 'profile') {
       return <Profile session={session} onBack={goHome} />;
     }
 
-    // Default: Teacher Dashboard
+    // 6. DEFAULT: Teacher Dashboard (MUST BE LAST)
     return (
       <TeacherDashboard
         teacher={{
@@ -97,7 +123,13 @@ export default function App() {
         onNavigate={(screen: string) => setCurrentScreen(screen)}
         onSelectClass={(classData: any) => {
           setSelectedData(classData);
-          setCurrentScreen('start-session');
+          // Logic: If active, go to Live View. If new, go to Start Session.
+          // For now, let's default to Live View if it exists.
+          if (classData.is_active) {
+            setCurrentScreen('live-view');
+          } else {
+            setCurrentScreen('start-session');
+          }
         }}
       />
     );

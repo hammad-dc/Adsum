@@ -3,13 +3,14 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   TextInput,
+  TouchableOpacity,
   Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  PermissionsAndroid,
 } from 'react-native';
 import {
   ArrowLeft,
@@ -18,12 +19,17 @@ import {
   Check,
   AlertCircle,
   ChevronDown,
-  Loader, // Ensure this is just 'Loader', not 'Loader2'
+  Loader,
 } from 'lucide-react-native';
 import { supabase } from './lib/supabase';
+import Geolocation from 'react-native-geolocation-service';
+import {
+  CLASSROOM_LOCATION,
+  getDistanceFromLatLonInMeters,
+} from './lib/location';
 
 export default function MarkAttendance({
-  classSession = { name: 'Data Structures', room: 'Lab 301' },
+  classSession,
   onBack,
   onSuccess,
 }: any) {
@@ -33,18 +39,20 @@ export default function MarkAttendance({
   const [locationStatus, setLocationStatus] = useState<
     'searching' | 'verified' | 'failed'
   >('searching');
+  const [distance, setDistance] = useState<number | null>(null);
   const [code, setCode] = useState(['', '', '', '']);
-  const [codeExpiry, setCodeExpiry] = useState(38);
+  const [codeExpiry, setCodeExpiry] = useState(45);
   const [showHelp, setShowHelp] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // FIX: Explicitly type the ref array
   const inputRefs = useRef<(TextInput | null)[]>([]);
 
   useEffect(() => {
-    // Mock Checks
-    setTimeout(() => setBluetoothStatus('connected'), 2000);
-    setTimeout(() => setLocationStatus('verified'), 1500);
+    // 1. Bluetooth (Still Mock for now)
+    setTimeout(() => setBluetoothStatus('connected'), 1000);
+
+    // 2. Real GPS Check
+    checkLocation();
 
     const timer = setInterval(() => {
       setCodeExpiry(prev => (prev <= 1 ? 45 : prev - 1));
@@ -52,31 +60,78 @@ export default function MarkAttendance({
     return () => clearInterval(timer);
   }, []);
 
+  const checkLocation = async () => {
+    try {
+      // A. Request Permission
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          setLocationStatus('failed');
+          Alert.alert('Permission Denied', 'Location access is required.');
+          return;
+        }
+      }
+
+      // B. Get Position
+      Geolocation.getCurrentPosition(
+        position => {
+          const { latitude, longitude } = position.coords;
+
+          // C. Calculate Distance
+          const dist = getDistanceFromLatLonInMeters(
+            latitude,
+            longitude,
+            CLASSROOM_LOCATION.latitude,
+            CLASSROOM_LOCATION.longitude,
+          );
+
+          setDistance(Math.round(dist));
+
+          if (dist <= CLASSROOM_LOCATION.radius) {
+            setLocationStatus('verified');
+          } else {
+            setLocationStatus('failed');
+          }
+        },
+        error => {
+          console.log(error.code, error.message);
+          setLocationStatus('failed');
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 },
+      );
+    } catch (err) {
+      setLocationStatus('failed');
+    }
+  };
+
   const handleCodeChange = (text: string, index: number) => {
     if (text.length > 1) return;
     const newCode = [...code];
     newCode[index] = text;
     setCode(newCode);
-
-    // Auto-focus next
-    if (text && index < 3) {
-      inputRefs.current[index + 1]?.focus();
-    }
+    if (text && index < 3) inputRefs.current[index + 1]?.focus();
   };
 
   const handleSubmit = async () => {
+    // Block if location failed (Security Feature)
+    if (locationStatus !== 'verified') {
+      Alert.alert(
+        'Location Error',
+        `You are ${distance}m away. You must be within ${CLASSROOM_LOCATION.radius}m.`,
+      );
+      return;
+    }
+
     const enteredCode = code.join('');
 
-    // --- DEBUGGING: Uncomment this if you are still stuck ---
-    // Alert.alert("Debug Info", `You typed: ${enteredCode}\nReal Code: ${classSession.active_code}`);
-
-    // 1. VALIDATION CHECK
-    // If the database code is empty or doesn't match what you typed -> FAIL
+    // Validate Code
     if (!classSession.active_code || enteredCode !== classSession.active_code) {
       Alert.alert('Wrong Code', 'The code you entered is incorrect.');
-      setCode(['', '', '', '']); // Clear boxes
-      inputRefs.current[0]?.focus(); // Focus first box
-      return; // <--- STOP HERE! Do not proceed to save.
+      setCode(['', '', '', '']);
+      inputRefs.current[0]?.focus();
+      return;
     }
 
     setIsSubmitting(true);
@@ -87,8 +142,7 @@ export default function MarkAttendance({
       } = await supabase.auth.getUser();
       if (!user) throw new Error('No user found');
 
-      // 2. CHECK DUPLICATES
-      // Did this student already mark attendance for this session?
+      // Check Duplicates
       const { data: existing } = await supabase
         .from('attendance')
         .select('*')
@@ -97,20 +151,19 @@ export default function MarkAttendance({
         .single();
 
       if (existing) {
-        Alert.alert(
-          'Duplicate',
-          'You have already marked attendance for this class.',
-        );
+        Alert.alert('Duplicate', 'You have already marked attendance.');
         if (onSuccess) onSuccess();
         return;
       }
 
-      // 3. SUCCESS: SAVE TO DB
+      // Save to DB
       const { error } = await supabase.from('attendance').insert({
         session_id: classSession.id,
         student_id: user.id,
         status: 'present',
-        verification_method: 'code',
+        verification_method: 'gps_code',
+        gps_lat: 0, // Placeholder
+        gps_long: 0, // Placeholder
       });
 
       if (error) throw error;
@@ -124,6 +177,7 @@ export default function MarkAttendance({
     }
   };
 
+  // --- UI Components ---
   const renderStatusStep = (
     type: 'bt' | 'gps',
     status: string,
@@ -133,11 +187,10 @@ export default function MarkAttendance({
     let color =
       status === 'searching'
         ? '#FF9800'
-        : status === 'verified' || status === 'connected'
+        : status === 'verified'
         ? '#4CAF50'
         : '#F44336';
-    let Icon =
-      status === 'verified' || status === 'connected' ? Check : AlertCircle;
+    let Icon = status === 'verified' ? Check : AlertCircle;
 
     return (
       <View style={styles.statusCard}>
@@ -174,8 +227,12 @@ export default function MarkAttendance({
             <ArrowLeft color="#FFF" size={24} />
           </TouchableOpacity>
           <View style={{ flex: 1, alignItems: 'center' }}>
-            <Text style={styles.headerTitle}>{classSession.name}</Text>
-            <Text style={styles.headerSub}>{classSession.room}</Text>
+            <Text style={styles.headerTitle}>
+              {classSession.subjects?.name || classSession.class_name}
+            </Text>
+            <Text style={styles.headerSub}>
+              {classSession.room_number || 'Room TBD'}
+            </Text>
           </View>
           <View style={{ width: 24 }} />
         </View>
@@ -188,24 +245,27 @@ export default function MarkAttendance({
               bluetoothStatus === 'connected'
                 ? 'Classroom Detected'
                 : 'Searching Beacon...',
-              bluetoothStatus === 'connected'
-                ? 'Connected to Teacher'
-                : 'Ensure Bluetooth is On',
+              'Proximity Verified',
             )}
             <View style={{ height: 10 }} />
+
+            {/* GPS STATUS */}
             {renderStatusStep(
               'gps',
               locationStatus,
               locationStatus === 'verified'
                 ? 'Location Verified'
+                : locationStatus === 'failed'
+                ? 'Location Mismatch'
                 : 'Checking GPS...',
               locationStatus === 'verified'
-                ? 'Accuracy: 12m'
-                : 'Stand inside the room',
+                ? `Within ${distance}m of class`
+                : distance
+                ? `You are ${distance}m away!`
+                : 'Locating...',
             )}
           </View>
 
-          {/* OTP Input */}
           <View style={styles.card}>
             <Text style={styles.centerLabel}>Enter Code from Board</Text>
             <Text style={styles.timerText}>Code expires in {codeExpiry}s</Text>
@@ -214,7 +274,6 @@ export default function MarkAttendance({
               {code.map((digit, index) => (
                 <TextInput
                   key={index}
-                  // FIX: Explicit Ref Type Casting
                   ref={ref => {
                     if (ref) inputRefs.current[index] = ref;
                   }}
@@ -223,15 +282,6 @@ export default function MarkAttendance({
                   maxLength={1}
                   value={digit}
                   onChangeText={text => handleCodeChange(text, index)}
-                  onKeyPress={({ nativeEvent }) => {
-                    if (
-                      nativeEvent.key === 'Backspace' &&
-                      !code[index] &&
-                      index > 0
-                    ) {
-                      inputRefs.current[index - 1]?.focus();
-                    }
-                  }}
                 />
               ))}
             </View>
@@ -244,31 +294,16 @@ export default function MarkAttendance({
               />
             </View>
           </View>
-
-          <TouchableOpacity
-            style={styles.helpCard}
-            onPress={() => setShowHelp(!showHelp)}
-          >
-            <Text style={{ color: '#212121' }}>Troubleshooting</Text>
-            <ChevronDown size={20} color="#757575" />
-          </TouchableOpacity>
-          {showHelp && (
-            <View style={styles.helpContent}>
-              <Text style={styles.helpText}>• Turn on Bluetooth</Text>
-              <Text style={styles.helpText}>• Allow Location Permissions</Text>
-            </View>
-          )}
         </ScrollView>
 
         <View style={styles.footer}>
           <TouchableOpacity
             style={[
               styles.submitButton,
-              (!code.every(d => d !== '') || bluetoothStatus !== 'connected') &&
-                styles.disabledButton,
+              locationStatus !== 'verified' && styles.disabledButton,
             ]}
             onPress={handleSubmit}
-            disabled={!code.every(d => d !== '') || isSubmitting}
+            disabled={locationStatus !== 'verified' || isSubmitting}
           >
             {isSubmitting ? (
               <ActivityIndicator color="#FFF" />
@@ -345,21 +380,6 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   timerBarFill: { height: 6, backgroundColor: '#FF9800', borderRadius: 3 },
-  helpCard: {
-    backgroundColor: '#FFF',
-    padding: 15,
-    borderRadius: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    elevation: 1,
-  },
-  helpContent: {
-    padding: 15,
-    backgroundColor: '#FAFAFA',
-    marginTop: 2,
-    borderRadius: 8,
-  },
-  helpText: { color: '#757575', marginBottom: 5 },
   footer: {
     padding: 20,
     backgroundColor: '#FFF',

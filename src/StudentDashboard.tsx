@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,62 +7,53 @@ import {
   TouchableOpacity,
   Image,
   StatusBar,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { Bell, Home, History, User, Clock, MapPin } from 'lucide-react-native';
 import Svg, { Circle } from 'react-native-svg';
-
-// Mock Data
-const MOCK_CLASSES = [
-  {
-    id: '1',
-    name: 'Data Structures',
-    time: '9:00 AM - 10:00 AM',
-    room: 'Lab 301',
-    status: 'ongoing',
-  },
-  {
-    id: '2',
-    name: 'Database Management',
-    time: '10:15 AM - 11:15 AM',
-    room: 'Room 204',
-    status: 'upcoming',
-  },
-  {
-    id: '3',
-    name: 'Algorithms',
-    time: '11:30 AM - 12:30 PM',
-    room: 'Lab 302',
-    status: 'upcoming',
-  },
-  {
-    id: '4',
-    name: 'Operating Systems',
-    time: '2:00 PM - 3:00 PM',
-    room: 'Room 301',
-    status: 'upcoming',
-  },
-];
+import { supabase } from './lib/supabase';
 
 export default function StudentDashboard({ session, onNavigate }: any) {
   const [activeTab, setActiveTab] = useState('home');
+  const [classes, setClasses] = useState<any[]>([]); // Real Data
+  const [loading, setLoading] = useState(true);
+
+  // --- 1. FETCH LIVE CLASSES ---
+  const fetchLiveClasses = async () => {
+    setLoading(true);
+    try {
+      // Fetch only ACTIVE sessions
+      const { data, error } = await supabase
+        .from('sessions')
+        .select('*, subjects(*)') // Get session info + linked subject info
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setClasses(data || []);
+    } catch (err) {
+      console.error('Error fetching student classes:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLiveClasses();
+  }, []);
 
   // --- Chart Calculations ---
   const size = 100;
   const strokeWidth = 10;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const progress = 0.87; // 87%
+  const progress = 0.87; // 87% (Static for now, will connect to history later)
   const strokeDashoffset = circumference * (1 - progress);
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'ongoing':
-        return { bg: '#4CAF50', text: '#FFFFFF', label: 'Ongoing' };
-      case 'upcoming':
-        return { bg: '#E0E0E0', text: '#757575', label: 'Upcoming' };
-      default:
-        return { bg: '#E0E0E0', text: '#757575', label: status };
-    }
+    // Since we only fetch active classes, they are mostly 'ongoing'
+    return { bg: '#4CAF50', text: '#FFFFFF', label: 'Ongoing' };
   };
 
   const renderContent = () => {
@@ -71,6 +62,13 @@ export default function StudentDashboard({ session, onNavigate }: any) {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={loading}
+              onRefresh={fetchLiveClasses}
+              colors={['#2196F3']}
+            />
+          }
         >
           {/* Blue Header Section */}
           <View style={styles.headerContainer}>
@@ -78,13 +76,15 @@ export default function StudentDashboard({ session, onNavigate }: any) {
               <View style={styles.userInfo}>
                 <Image
                   source={{
-                    uri: 'https://api.dicebear.com/9.x/avataaars/png?seed=Rahul',
+                    uri:
+                      'https://api.dicebear.com/9.x/avataaars/png?seed=' +
+                      session.user.email,
                   }}
                   style={styles.avatar}
                 />
                 <View>
-                  <Text style={styles.userName}>Rahul Sharma</Text>
-                  <Text style={styles.userId}>Student ID: S-2025</Text>
+                  <Text style={styles.userName}>Student</Text>
+                  <Text style={styles.userId}>{session.user.email}</Text>
                 </View>
               </View>
               <TouchableOpacity style={styles.iconButton}>
@@ -92,7 +92,7 @@ export default function StudentDashboard({ session, onNavigate }: any) {
               </TouchableOpacity>
             </View>
 
-            {/* Attendance Summary Card (Overlapping) */}
+            {/* Attendance Summary Card */}
             <View style={styles.summaryCard}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.summaryLabel}>Overall Attendance</Text>
@@ -134,22 +134,51 @@ export default function StudentDashboard({ session, onNavigate }: any) {
 
           {/* List Section */}
           <View style={styles.listSection}>
-            <Text style={styles.sectionTitle}>Today's Schedule</Text>
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <Text style={styles.sectionTitle}>Today's Schedule</Text>
+              {loading && <ActivityIndicator size="small" color="#2196F3" />}
+            </View>
 
-            {MOCK_CLASSES.map(item => {
-              const statusColors = getStatusColor(item.status);
+            {/* Empty State */}
+            {!loading && classes.length === 0 && (
+              <View style={{ padding: 20, alignItems: 'center' }}>
+                <Text style={{ color: '#999' }}>
+                  No active classes right now.
+                </Text>
+              </View>
+            )}
+
+            {/* Real Data List */}
+            {classes.map(item => {
+              const statusColors = getStatusColor('ongoing');
+
+              // Smart Name Logic (Matches Teacher Dashboard)
+              const displayName =
+                item.class_name || item.subjects?.name || 'Untitled Class';
+              const displayRoom = item.room_number || 'Room TBD';
+              const timeString = new Date(item.created_at).toLocaleTimeString(
+                [],
+                { hour: '2-digit', minute: '2-digit' },
+              );
+
               return (
                 <View key={item.id} style={styles.classCard}>
                   <View style={styles.cardHeader}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.className}>{item.name}</Text>
+                      <Text style={styles.className}>{displayName}</Text>
                       <View style={styles.metaRow}>
                         <Clock size={14} color="#757575" />
-                        <Text style={styles.metaText}>{item.time}</Text>
+                        <Text style={styles.metaText}>{timeString}</Text>
                       </View>
                       <View style={styles.metaRow}>
                         <MapPin size={14} color="#757575" />
-                        <Text style={styles.metaText}>{item.room}</Text>
+                        <Text style={styles.metaText}>{displayRoom}</Text>
                       </View>
                     </View>
                     <View
@@ -169,16 +198,14 @@ export default function StudentDashboard({ session, onNavigate }: any) {
                     </View>
                   </View>
 
-                  {item.status === 'ongoing' && (
-                    <TouchableOpacity
-                      style={styles.markButton}
-                      onPress={() =>
-                        onNavigate && onNavigate('mark-attendance', item)
-                      }
-                    >
-                      <Text style={styles.markButtonText}>Mark Attendance</Text>
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity
+                    style={styles.markButton}
+                    onPress={() =>
+                      onNavigate && onNavigate('mark-attendance', item)
+                    }
+                  >
+                    <Text style={styles.markButtonText}>Mark Attendance</Text>
+                  </TouchableOpacity>
                 </View>
               );
             })}
@@ -197,10 +224,7 @@ export default function StudentDashboard({ session, onNavigate }: any) {
   return (
     <View style={styles.container}>
       <StatusBar backgroundColor="#2196F3" barStyle="light-content" />
-
       {renderContent()}
-
-      {/* Bottom Navigation */}
       <View style={styles.bottomNav}>
         <TouchableOpacity
           style={styles.navItem}
@@ -219,7 +243,6 @@ export default function StudentDashboard({ session, onNavigate }: any) {
             Home
           </Text>
         </TouchableOpacity>
-
         <TouchableOpacity
           style={styles.navItem}
           onPress={() => onNavigate && onNavigate('history', null)}
@@ -237,7 +260,6 @@ export default function StudentDashboard({ session, onNavigate }: any) {
             History
           </Text>
         </TouchableOpacity>
-
         <TouchableOpacity
           style={styles.navItem}
           onPress={() => onNavigate && onNavigate('profile', null)}

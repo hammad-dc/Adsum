@@ -20,6 +20,7 @@ import {
   ChevronDown,
   Loader, // Ensure this is just 'Loader', not 'Loader2'
 } from 'lucide-react-native';
+import { supabase } from './lib/supabase';
 
 export default function MarkAttendance({
   classSession = { name: 'Data Structures', room: 'Lab 301' },
@@ -63,13 +64,64 @@ export default function MarkAttendance({
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    const enteredCode = code.join('');
+
+    // --- DEBUGGING: Uncomment this if you are still stuck ---
+    // Alert.alert("Debug Info", `You typed: ${enteredCode}\nReal Code: ${classSession.active_code}`);
+
+    // 1. VALIDATION CHECK
+    // If the database code is empty or doesn't match what you typed -> FAIL
+    if (!classSession.active_code || enteredCode !== classSession.active_code) {
+      Alert.alert('Wrong Code', 'The code you entered is incorrect.');
+      setCode(['', '', '', '']); // Clear boxes
+      inputRefs.current[0]?.focus(); // Focus first box
+      return; // <--- STOP HERE! Do not proceed to save.
+    }
+
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
-      Alert.alert('Success', 'Attendance Marked!');
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error('No user found');
+
+      // 2. CHECK DUPLICATES
+      // Did this student already mark attendance for this session?
+      const { data: existing } = await supabase
+        .from('attendance')
+        .select('*')
+        .eq('session_id', classSession.id)
+        .eq('student_id', user.id)
+        .single();
+
+      if (existing) {
+        Alert.alert(
+          'Duplicate',
+          'You have already marked attendance for this class.',
+        );
+        if (onSuccess) onSuccess();
+        return;
+      }
+
+      // 3. SUCCESS: SAVE TO DB
+      const { error } = await supabase.from('attendance').insert({
+        session_id: classSession.id,
+        student_id: user.id,
+        status: 'present',
+        verification_method: 'code',
+      });
+
+      if (error) throw error;
+
+      Alert.alert('Success', 'Attendance Marked! ✅');
       if (onSuccess) onSuccess();
-    }, 1500);
+    } catch (err: any) {
+      Alert.alert('Error', err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const renderStatusStep = (

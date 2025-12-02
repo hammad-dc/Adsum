@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,48 +8,18 @@ import {
   Image,
   FlatList,
   StatusBar,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import {
-  Bell,
   LayoutDashboard,
   FileText,
   User,
   Clock,
   MapPin,
-  Users,
   Plus,
 } from 'lucide-react-native';
-import { supabase } from './lib/supabase'; // Needed for the logout trick
-
-const mockClasses = [
-  {
-    id: '1',
-    name: 'Data Structures - Sec A',
-    time: '9:00 AM - 10:00 AM',
-    room: 'Lab 301',
-    status: 'ongoing',
-    totalStudents: 50,
-    presentStudents: 23,
-  },
-  {
-    id: '2',
-    name: 'Algorithms - Sec B',
-    time: '10:15 AM - 11:15 AM',
-    room: 'Lab 302',
-    status: 'upcoming',
-    totalStudents: 45,
-    presentStudents: 0,
-  },
-  {
-    id: '3',
-    name: 'Data Structures - Sec B',
-    time: '11:30 AM - 12:30 PM',
-    room: 'Lab 301',
-    status: 'upcoming',
-    totalStudents: 48,
-    presentStudents: 0,
-  },
-];
+import { supabase } from './lib/supabase';
 
 export default function TeacherDashboard({
   teacher,
@@ -57,39 +27,77 @@ export default function TeacherDashboard({
   onSelectClass,
 }: any) {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [classes, setClasses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'ongoing':
-        return { bg: '#4CAF50', text: '#FFF' };
-      case 'upcoming':
-        return { bg: '#E0E0E0', text: '#757575' };
-      default:
-        return { bg: '#2196F3', text: '#FFF' };
+  // --- 1. SMART FETCH (Gets Data + Relations) ---
+  const fetchClasses = async () => {
+    setLoading(true);
+    try {
+      // Fetch everything: Direct columns AND linked subjects
+      const { data, error } = await supabase
+        .from('sessions')
+        .select('*, subjects(*)')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Supabase Error:', error.message);
+      } else {
+        console.log('Fetched Classes:', data); // View this in your Metro terminal!
+        setClasses(data || []);
+      }
+    } catch (err) {
+      console.error('Fetch failed:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
+  useEffect(() => {
+    fetchClasses();
+  }, []);
+
+  const getStatusColor = (isActive: boolean) => {
+    return isActive
+      ? { bg: '#4CAF50', text: '#FFF', label: 'ONGOING' }
+      : { bg: '#E0E0E0', text: '#757575', label: 'COMPLETED' };
+  };
+
   const renderClassItem = ({ item }: any) => {
-    const statusColors = getStatusColor(item.status);
+    const status = getStatusColor(item.is_active);
+
+    // --- THE FIX: Check ALL possible name locations ---
+    // 1. Try the direct text column (New way)
+    // 2. Try the linked subject relation (Old way)
+    // 3. Fallback to "Untitled"
+    const displayName =
+      item.class_name || item.subjects?.name || 'Untitled Class';
+    const displayRoom = item.room_number || 'Room TBD';
+
+    const timeString = new Date(item.created_at).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.className}>{item.name}</Text>
+            <Text style={styles.className}>{displayName}</Text>
+
             <View style={styles.metaRow}>
               <Clock size={14} color="#757575" />
-              <Text style={styles.metaText}>{item.time}</Text>
+              <Text style={styles.metaText}>{timeString}</Text>
             </View>
             <View style={styles.metaRow}>
               <MapPin size={14} color="#757575" />
-              <Text style={styles.metaText}>{item.room}</Text>
+              <Text style={styles.metaText}>{displayRoom}</Text>
             </View>
           </View>
-          <View
-            style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}
-          >
-            <Text style={[styles.statusText, { color: statusColors.text }]}>
-              {item.status.toUpperCase()}
+
+          <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
+            <Text style={[styles.statusText, { color: status.text }]}>
+              {status.label}
             </Text>
           </View>
         </View>
@@ -98,20 +106,30 @@ export default function TeacherDashboard({
           style={[
             styles.actionButton,
             {
-              backgroundColor: item.status === 'ongoing' ? '#2196F3' : '#fff',
-              borderWidth: item.status === 'ongoing' ? 0 : 1,
+              backgroundColor: item.is_active ? '#2196F3' : '#fff',
+              borderWidth: item.is_active ? 0 : 1,
               borderColor: '#E0E0E0',
             },
           ]}
-          onPress={() => onSelectClass && onSelectClass(item)}
+          onPress={() =>
+            onSelectClass &&
+            onSelectClass({
+              id: item.id,
+              name: displayName,
+              room: displayRoom,
+              beacon_id: item.beacon_id,
+              active_code: item.active_code,
+              totalStudents: 0,
+            })
+          }
         >
           <Text
             style={[
               styles.actionButtonText,
-              { color: item.status === 'ongoing' ? '#FFF' : '#333' },
+              { color: item.is_active ? '#FFF' : '#333' },
             ]}
           >
-            {item.status === 'ongoing' ? 'Manage Session' : 'Start Session'}
+            {item.is_active ? 'Manage Session' : 'View Report'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -125,7 +143,6 @@ export default function TeacherDashboard({
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          {/* Profile Row with Logout Trick */}
           <TouchableOpacity
             style={styles.profileRow}
             onPress={() => supabase.auth.signOut()}
@@ -139,7 +156,6 @@ export default function TeacherDashboard({
             </View>
           </TouchableOpacity>
 
-          {/* FIX 1: Send 'add-class' to match App.tsx */}
           <TouchableOpacity
             style={styles.addButton}
             onPress={() => onNavigate && onNavigate('add-class')}
@@ -157,34 +173,45 @@ export default function TeacherDashboard({
           contentContainerStyle={{ paddingRight: 20 }}
         >
           <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Classes Today</Text>
-            <Text style={[styles.statValue, { color: '#2196F3' }]}>4</Text>
+            <Text style={styles.statLabel}>Total Classes</Text>
+            <Text style={[styles.statValue, { color: '#2196F3' }]}>
+              {classes.length}
+            </Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Students Attended</Text>
-            <Text style={[styles.statValue, { color: '#4CAF50' }]}>23</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Pending</Text>
-            <Text style={[styles.statValue, { color: '#FF9800' }]}>3</Text>
+            <Text style={styles.statLabel}>Active Now</Text>
+            <Text style={[styles.statValue, { color: '#4CAF50' }]}>
+              {classes.filter(c => c.is_active).length}
+            </Text>
           </View>
         </ScrollView>
       </View>
 
-      {/* Class List */}
+      {/* List */}
       <View style={styles.listContainer}>
-        <Text style={styles.sectionTitle}>Today's Classes</Text>
+        <Text style={styles.sectionTitle}>Your Classes</Text>
         <FlatList
-          data={mockClasses}
-          keyExtractor={item => item.id}
+          data={classes}
+          keyExtractor={item => item.id.toString()}
           renderItem={renderClassItem}
           contentContainerStyle={{ paddingBottom: 80 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={loading}
+              onRefresh={fetchClasses}
+              colors={['#2196F3']}
+            />
+          }
+          ListEmptyComponent={
+            <Text style={{ textAlign: 'center', marginTop: 50, color: '#999' }}>
+              No classes created yet.
+            </Text>
+          }
         />
       </View>
 
       {/* Bottom Nav */}
       <View style={styles.bottomNav}>
-        {/* Dashboard Button */}
         <TouchableOpacity
           style={styles.navItem}
           onPress={() => setActiveTab('dashboard')}
@@ -203,7 +230,6 @@ export default function TeacherDashboard({
           </Text>
         </TouchableOpacity>
 
-        {/* Reports Button (FIX 2: Navigate to Reports/History) */}
         <TouchableOpacity
           style={styles.navItem}
           onPress={() => onNavigate && onNavigate('reports')}
@@ -212,7 +238,6 @@ export default function TeacherDashboard({
           <Text style={styles.navText}>Reports</Text>
         </TouchableOpacity>
 
-        {/* Profile Button (FIX 3: Navigate to Profile Screen) */}
         <TouchableOpacity
           style={styles.navItem}
           onPress={() => onNavigate && onNavigate('profile')}
@@ -261,7 +286,7 @@ const styles = StyleSheet.create({
   statLabel: { color: '#757575', fontSize: 12, marginBottom: 5 },
   statValue: { fontSize: 24, fontWeight: 'bold' },
 
-  listContainer: { flex: 1, padding: 20 },
+  listContainer: { flex: 1, padding: 20, marginTop: -10 },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',

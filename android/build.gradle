@@ -1,11 +1,12 @@
 buildscript {
     ext {
-        buildToolsVersion = "36.0.0"
+        // 👇 CHANGED THESE TO 34 TO MATCH YOUR NEW PHONE
+        buildToolsVersion = "34.0.0"
         minSdkVersion = 24
-        compileSdkVersion = 36
-        targetSdkVersion = 36
-        ndkVersion = "27.1.12297006"
-        kotlinVersion = "2.1.20"
+        compileSdkVersion = 34
+        targetSdkVersion = 34
+        ndkVersion = "27.1.12297006" // Standard stable NDK
+        kotlinVersion = "1.9.22"     // Standard stable Kotlin
     }
     repositories {
         google()
@@ -15,6 +16,18 @@ buildscript {
         classpath("com.android.tools.build:gradle")
         classpath("com.facebook.react:react-native-gradle-plugin")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+    }
+}
+
+// 👇 THIS IS THE FIX FOR THE BLUETOOTH LIBRARY
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty("android")) {
+            android {
+                compileSdkVersion = 34
+                buildToolsVersion = "34.0.0"
+            }
+        }
     }
 }
 

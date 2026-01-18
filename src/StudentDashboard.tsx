@@ -1,0 +1,544 @@
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Image,
+  StatusBar,
+  RefreshControl,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
+import {
+  Bell,
+  Home,
+  History,
+  User,
+  Clock,
+  MapPin,
+  LogOut,
+  FileText,
+  Mail,
+  Shield,
+  BookOpen,
+} from 'lucide-react-native';
+import Svg, { Circle } from 'react-native-svg';
+import { supabase } from './lib/supabase';
+
+// Helper component for clean Profile rows
+const InfoRow = ({ icon: Icon, label, value, isLast = false }: any) => (
+  <View>
+    <View style={styles.infoRow}>
+      <Icon size={20} color="#757575" />
+      <View style={{ marginLeft: 10 }}>
+        <Text style={styles.infoLabel}>{label}</Text>
+        <Text style={styles.infoValue}>{value}</Text>
+      </View>
+    </View>
+    {!isLast && <View style={styles.infoDivider} />}
+  </View>
+);
+
+export default function StudentDashboard({ session, onNavigate }: any) {
+  const [activeTab, setActiveTab] = useState('home');
+  const [classes, setClasses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Default values for Profile Tab
+  const email = session?.user?.email || 'user@adsum.com';
+  const role = 'Student';
+  const id = 'S-2025-001';
+
+  // --- 1. FETCH LIVE CLASSES ---
+  const fetchLiveClasses = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('sessions')
+        .select('*, subjects(*)')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setClasses(data || []);
+    } catch (err) {
+      console.error('Error fetching student classes:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLiveClasses();
+  }, []);
+
+  // --- CONSISTENT LOGOUT LOGIC ---
+  const handleLogout = async () => {
+    Alert.alert('Sign Out', 'Are you sure you want to log out?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Log Out',
+        style: 'destructive',
+        onPress: async () => await supabase.auth.signOut(),
+      },
+    ]);
+  };
+
+  // --- Chart Calculations ---
+  const size = 100;
+  const strokeWidth = 10;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const progress = 0.87;
+  const strokeDashoffset = circumference * (1 - progress);
+
+  const getStatusColor = (status: string) => {
+    return { bg: '#4CAF50', text: '#FFFFFF', label: 'Ongoing' };
+  };
+
+  const renderContent = () => {
+    // --- TAB 1: HOME ---
+    if (activeTab === 'home') {
+      return (
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={loading}
+              onRefresh={fetchLiveClasses}
+              colors={['#2196F3']}
+            />
+          }
+        >
+          {/* Header */}
+          <View style={styles.headerContainer}>
+            <View style={styles.headerContent}>
+              <View style={styles.userInfo}>
+                <Image
+                  // ✅ FIX 1: Updated Header Avatar
+                  source={{
+                    uri: `https://api.dicebear.com/9.x/initials/png?seed=${session.user.email}&backgroundColor=2196F3&chars=2`,
+                  }}
+                  style={styles.avatar}
+                />
+                <View>
+                  <Text style={styles.userName}>
+                    {session.user.email?.split('@')[0]}
+                  </Text>
+                  <Text style={styles.userId}>Student</Text>
+                </View>
+              </View>
+              <TouchableOpacity style={styles.iconButton}>
+                <Bell color="#FFF" size={24} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Attendance Summary Card */}
+            <View style={styles.summaryCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.summaryLabel}>Overall Attendance</Text>
+                <Text style={styles.summaryPercent}>87%</Text>
+                <Text style={styles.summarySub}>60 out of 69 classes</Text>
+              </View>
+              <View
+                style={{
+                  width: 100,
+                  height: 100,
+                  transform: [{ rotate: '-90deg' }],
+                }}
+              >
+                <Svg width={size} height={size}>
+                  <Circle
+                    cx={size / 2}
+                    cy={size / 2}
+                    r={radius}
+                    stroke="#E3F2FD"
+                    strokeWidth={strokeWidth}
+                    fill="none"
+                  />
+                  <Circle
+                    cx={size / 2}
+                    cy={size / 2}
+                    r={radius}
+                    stroke="#2196F3"
+                    strokeWidth={strokeWidth}
+                    fill="none"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={strokeDashoffset}
+                    strokeLinecap="round"
+                  />
+                </Svg>
+              </View>
+            </View>
+          </View>
+
+          {/* List Section */}
+          <View style={styles.listSection}>
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <Text style={styles.sectionTitle}>Today's Schedule</Text>
+              {loading && <ActivityIndicator size="small" color="#2196F3" />}
+            </View>
+
+            {!loading && classes.length === 0 && (
+              <View style={{ padding: 20, alignItems: 'center' }}>
+                <Text style={{ color: '#999' }}>
+                  No active classes right now.
+                </Text>
+              </View>
+            )}
+
+            {classes.map(item => {
+              const statusColors = getStatusColor('ongoing');
+              const displayName =
+                item.class_name || item.subjects?.name || 'Untitled Class';
+              const displayRoom = item.room_number || 'Room TBD';
+              const timeString = new Date(item.created_at).toLocaleTimeString(
+                [],
+                { hour: '2-digit', minute: '2-digit' },
+              );
+
+              return (
+                <View key={item.id} style={styles.classCard}>
+                  <View style={styles.cardHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.className}>{displayName}</Text>
+                      <View style={styles.metaRow}>
+                        <Clock size={14} color="#757575" />
+                        <Text style={styles.metaText}>{timeString}</Text>
+                      </View>
+                      <View style={styles.metaRow}>
+                        <MapPin size={14} color="#757575" />
+                        <Text style={styles.metaText}>{displayRoom}</Text>
+                      </View>
+                    </View>
+                    <View
+                      style={[
+                        styles.statusPill,
+                        { backgroundColor: statusColors.bg },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.statusText,
+                          { color: statusColors.text },
+                        ]}
+                      >
+                        {statusColors.label}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.markButton}
+                    onPress={() =>
+                      onNavigate && onNavigate('mark-attendance', item)
+                    }
+                  >
+                    <Text style={styles.markButtonText}>Mark Attendance</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
+          <View style={{ height: 100 }} />
+        </ScrollView>
+      );
+    }
+
+    // --- TAB 2: HISTORY ---
+    if (activeTab === 'history') {
+      return (
+        <View style={styles.centerContainer}>
+          <FileText size={60} color="#E0E0E0" />
+          <Text style={styles.placeholderText}>History Coming Soon</Text>
+          <Text style={{ color: '#999', fontSize: 12 }}>
+            Past attendance records will appear here.
+          </Text>
+        </View>
+      );
+    }
+
+    // --- TAB 3: PROFILE (Polished Look) ---
+    if (activeTab === 'profile') {
+      return (
+        <ScrollView contentContainerStyle={styles.profileContainer}>
+          {/* 1. Profile Header */}
+          <View style={styles.profileHeader}>
+            <Image
+              // ✅ FIX 2: Updated Profile Tab Avatar (The one you asked for!)
+              source={{
+                uri: email ? `https://api.dicebear.com/9.x/initials/png?seed=${email}&backgroundColor=2196F3&chars=2` : 'https://via.placeholder.com/150' //backup image,
+              }}
+              style={styles.bigAvatar}
+            />
+            <Text style={styles.bigName}>{email.split('@')[0]}</Text>
+            <Text style={styles.roleText}>{role}</Text>
+          </View>
+
+          {/* 2. Details Card */}
+          <View style={styles.infoCard}>
+            <InfoRow icon={User} label="Student ID" value={id} />
+            <InfoRow icon={Mail} label="Email Address" value={email} />
+            <InfoRow
+              icon={Shield}
+              label="Department"
+              value="Computer Engineering"
+            />
+            <InfoRow
+              icon={BookOpen}
+              label="Enrolled Classes"
+              value="4 (Current Semester)"
+              isLast={true}
+            />
+          </View>
+
+          {/* 3. Logout Button */}
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <LogOut size={22} color="#FFF" style={{ marginRight: 15 }} />
+            <Text style={styles.logoutText}>Sign Out of Adsum</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.versionText}>Adsum Student v1.0</Text>
+        </ScrollView>
+      );
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <StatusBar backgroundColor="#2196F3" barStyle="light-content" />
+      {renderContent()}
+
+      {/* Bottom Nav */}
+      <View style={styles.bottomNav}>
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => setActiveTab('home')}
+        >
+          <Home
+            size={24}
+            color={activeTab === 'home' ? '#2196F3' : '#757575'}
+          />
+          <Text
+            style={[
+              styles.navText,
+              activeTab === 'home' && { color: '#2196F3' },
+            ]}
+          >
+            Home
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => setActiveTab('history')}
+        >
+          <History
+            size={24}
+            color={activeTab === 'history' ? '#2196F3' : '#757575'}
+          />
+          <Text
+            style={[
+              styles.navText,
+              activeTab === 'history' && { color: '#2196F3' },
+            ]}
+          >
+            History
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => setActiveTab('profile')}
+        >
+          <User
+            size={24}
+            color={activeTab === 'profile' ? '#2196F3' : '#757575'}
+          />
+          <Text
+            style={[
+              styles.navText,
+              activeTab === 'profile' && { color: '#2196F3' },
+            ]}
+          >
+            Profile
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  scrollContent: { paddingBottom: 20 },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom: 50,
+  },
+  placeholderText: {
+    fontSize: 18,
+    color: '#999',
+    marginTop: 15,
+    marginBottom: 5,
+  },
+
+  headerContainer: {
+    backgroundColor: '#2196F3',
+    paddingTop: 20,
+    paddingBottom: 80,
+    paddingHorizontal: 24,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  userInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#FFF' },
+  userName: { fontSize: 20, fontWeight: 'bold', color: '#FFF', textTransform: 'capitalize' },
+  userId: { fontSize: 14, color: '#BBDEFB' },
+  iconButton: { padding: 4 },
+
+  summaryCard: {
+    position: 'absolute',
+    bottom: -50,
+    left: 24,
+    right: 24,
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+  },
+  summaryLabel: { fontSize: 14, color: '#757575', marginBottom: 4 },
+  summaryPercent: { fontSize: 36, fontWeight: 'bold', color: '#2196F3' },
+  summarySub: { fontSize: 12, color: '#757575', marginTop: 4 },
+
+  listSection: { marginTop: 70, paddingHorizontal: 24 },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#212121',
+    marginBottom: 16,
+  },
+
+  classCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    elevation: 2,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  className: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#212121',
+    marginBottom: 6,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  metaText: { fontSize: 14, color: '#757575' },
+  statusPill: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
+  statusText: { fontSize: 12, fontWeight: 'bold' },
+
+  markButton: {
+    backgroundColor: '#2196F3',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  markButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
+
+  bottomNav: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFF',
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 12,
+    borderTopWidth: 0,
+    elevation: 10,
+  },
+  navItem: { alignItems: 'center' },
+  navText: { fontSize: 12, marginTop: 4, color: '#757575' },
+
+  // --- POLISHED PROFILE STYLES ---
+  profileContainer: { padding: 20, paddingBottom: 100 },
+  profileHeader: { alignItems: 'center', marginTop: 20, marginBottom: 40 },
+  bigAvatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 4,
+    borderColor: '#FFF',
+    marginBottom: 15,
+  },
+  bigName: { fontSize: 24, fontWeight: 'bold', color: '#333' },
+  roleText: { fontSize: 16, color: '#757575' },
+
+  infoCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    elevation: 2,
+    marginBottom: 25,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    gap: 15,
+  },
+  infoLabel: { fontSize: 12, color: '#757575' },
+  infoValue: { fontSize: 16, color: '#212121', fontWeight: '600' },
+  infoDivider: { height: 1, backgroundColor: '#EEE' },
+
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FF5252',
+    padding: 16,
+    borderRadius: 12,
+    elevation: 4,
+  },
+  logoutText: {
+    color: '#FFF',
+    fontWeight: 'bold',
+    marginLeft: 10,
+    fontSize: 16,
+  },
+  versionText: { textAlign: 'center', color: '#BBB', marginTop: 20 },
+});

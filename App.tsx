@@ -1,118 +1,136 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
+import React, { useEffect, useState } from 'react';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { Session } from '@supabase/supabase-js';
+import { supabase } from './src/lib/supabase';
 
-import React from 'react';
-import type {PropsWithChildren} from 'react';
-import {
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  useColorScheme,
-  View,
-} from 'react-native';
+import Auth from './src/Auth';
+import StudentDashboard from './src/StudentDashboard';
+import TeacherDashboard from './src/TeacherDashboard';
+import StartSession from './src/StartSession';
+import MarkAttendance from './src/MarkAttendance';
+import AddNewClass from './src/AddNewClass';
+import AttendanceHistory from './src/AttendanceHistory';
+import Profile from './src/Profile';
+import ManualOverride from './src/ManualOverride';
 
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
+export default function App() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState<'student' | 'teacher' | null>(null);
 
-type SectionProps = PropsWithChildren<{
-  title: string;
-}>;
+  const [currentScreen, setCurrentScreen] = useState('dashboard');
+  const [selectedData, setSelectedData] = useState<any>(null);
 
-function Section({children, title}: SectionProps): JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-  return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
-  );
-}
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      checkUserRole(session);
+    });
 
-function App(): JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      checkUserRole(session);
+    });
 
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // NEW: Fetch Real Role from DB
+  const checkUserRole = async (session: Session | null) => {
+    if (!session) {
+      setSession(null);
+      setUserRole(null);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .single();
+
+      if (data) setUserRole(data.role);
+      else setUserRole('student'); // Default fallback
+
+      setSession(session);
+    } catch (e) {
+      console.error('Role fetch error:', e);
+    } finally {
+      setLoading(false);
+      setCurrentScreen('dashboard'); // Reset nav
+      setSelectedData(null);
+    }
   };
 
-  return (
-    <SafeAreaView style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
+  if (loading)
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#2196F3" />
+      </View>
+    );
+
+  if (!session) return <Auth />;
+
+  // helper to go back home
+  const goHome = () => {
+    setCurrentScreen('dashboard');
+    setSelectedData(null);
+  };
+
+  // --- TEACHER FLOW ---
+  if (userRole === 'teacher') {
+    if (currentScreen === 'add-class')
+      return <AddNewClass onBack={goHome} onClassCreated={goHome} />;
+
+    if (currentScreen === 'start-session' && selectedData) {
+      return <StartSession classSession={selectedData} onBack={goHome} />;
+    }
+
+    if (currentScreen === 'profile')
+      return <Profile session={session} role="Faculty" onBack={goHome} />;
+
+    return (
+      <TeacherDashboard
+        teacher={{
+          name: session.user.email?.split('@')[0],
+          email: session.user.email,
+        }}
+        onNavigate={setCurrentScreen}
+        onSelectClass={(data: any) => {
+          setSelectedData(data);
+          setCurrentScreen('start-session');
+        }}
       />
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        style={backgroundStyle}>
-        <Header />
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+    );
+  }
+
+  // --- STUDENT FLOW ---
+  if (currentScreen === 'mark-attendance' && selectedData) {
+    return (
+      <MarkAttendance
+        classSession={selectedData}
+        onBack={goHome}
+        onSuccess={goHome}
+      />
+    );
+  }
+  if (currentScreen === 'history') return <AttendanceHistory onBack={goHome} />;
+  if (currentScreen === 'profile')
+    return <Profile session={session} role="Student" onBack={goHome} />;
+
+  return (
+    <StudentDashboard
+      session={session}
+      onNavigate={(screen: string, data: any) => {
+        if (data) setSelectedData(data);
+        setCurrentScreen(screen);
+      }}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  sectionDescription: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '400',
-  },
-  highlight: {
-    fontWeight: '700',
-  },
+  container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 });
-
-export default App;

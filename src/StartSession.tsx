@@ -383,7 +383,7 @@ export default function StartSession({classSession, onBack}: any) {
             style={styles.footerButton}
             onPress={() => setShowManual(true)}>
             <Eye size={24} color="#555" style={{marginRight: 8}} />
-            <Text style={styles.footerText}>Class List / Manual</Text>
+            <Text style={styles.footerText}>Class List / Manual Attendance</Text>
           </TouchableOpacity>
 
           <TouchableOpacity

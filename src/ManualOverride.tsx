@@ -40,7 +40,7 @@ export default function ManualOverride({
         .from('profiles')
         .select('*')
         .eq('role', 'student')
-        .order('full_name');
+        .order('name');
 
       // Get present students
       const { data: present } = await supabase
@@ -128,12 +128,12 @@ export default function ManualOverride({
         <View style={styles.row}>
           <Image
             source={{
-              uri: `https://api.dicebear.com/9.x/avataaars/png?seed=${item.full_name}`,
+              uri: `https://api.dicebear.com/9.x/initials/png?seed=${item.name}`,
             }}
             style={styles.avatar}
           />
           <View style={{ flex: 1 }}>
-            <Text style={styles.name}>{item.full_name}</Text>
+            <Text style={styles.name}>{item.name}</Text>
             <Text style={styles.subText}>{item.student_id}</Text>
           </View>
 
@@ -141,7 +141,7 @@ export default function ManualOverride({
           {item.isPresent ? (
             <TouchableOpacity
               style={styles.verifiedBadge}
-              onPress={() => removeStudent(item.id, item.full_name)}
+              onPress={() => removeStudent(item.id, item.name)}
             >
               <CheckCircle size={20} color="#4CAF50" />
               <Text style={styles.verifiedText}>Verified</Text>
@@ -191,7 +191,7 @@ export default function ManualOverride({
           ) : (
             <FlatList
               data={students.filter(s =>
-                s.full_name?.toLowerCase().includes(searchQuery.toLowerCase()),
+                s.name?.toLowerCase().includes(searchQuery.toLowerCase()),
               )}
               renderItem={renderItem}
               keyExtractor={item => item.id}

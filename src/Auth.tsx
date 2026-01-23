@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, {useState} from 'react';
 import {
   View,
   Text,
@@ -12,11 +12,17 @@ import {
   ScrollView,
   Switch,
 } from 'react-native';
-import { supabase } from './lib/supabase';
-import { Lock, Mail, Eye, EyeOff, ShieldAlert } from 'lucide-react-native';
+import {supabase} from './lib/supabase';
+import {Lock, Mail, Eye, EyeOff, ShieldAlert} from 'lucide-react-native';
 
 export default function Auth() {
+  const [isLoginMode, setIsLoginMode] = useState(true); // Default to Login
   const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [course, setCourse] = useState('');
+  const [year, setYear] = useState('');
+  const [teacherId, setTeacherId] = useState('');
+
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -43,17 +49,23 @@ export default function Auth() {
     try {
       if (type === 'SIGNUP') {
         const role = isTeacherMode ? 'teacher' : 'student';
-        const { error } = await supabase.auth.signUp({
+        const {error} = await supabase.auth.signUp({
           email,
           password,
           options: {
-            data: { full_name: isTeacherMode ? 'Faculty' : 'Student', role },
+            data: {
+              full_name: fullName,
+              role: role,
+              employee_id: isTeacherMode ? teacherId : null,
+              course: isTeacherMode ? 'Faculty' : course,
+              year: isTeacherMode ? 'N/A' : year,
+            },
           },
         });
         if (error) throw error;
         Alert.alert('Success', 'Account created! Please sign in.');
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        const {error} = await supabase.auth.signInWithPassword({
           email,
           password,
         });
@@ -69,12 +81,10 @@ export default function Auth() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
+      style={styles.container}>
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
-        keyboardShouldPersistTaps="handled"
-      >
+        keyboardShouldPersistTaps="handled">
         <View style={styles.headerSection}>
           <Text style={styles.title}>Adsum Attendance</Text>
           <Text style={styles.subtitle}>Secure Classroom Access</Text>
@@ -82,7 +92,7 @@ export default function Auth() {
 
         <View style={styles.formSection}>
           <View style={styles.inputWrapper}>
-            <Mail size={20} color="#666" style={{ marginRight: 10 }} />
+            <Mail size={20} color="#666" style={{marginRight: 10}} />
             <TextInput
               style={styles.input}
               placeholder="Email Address"
@@ -93,8 +103,85 @@ export default function Auth() {
             />
           </View>
 
+
+          {/* 2. Extra fields ONLY show during Signup */}
+          {!isLoginMode && (
+            <>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Full Name"
+                  placeholderTextColor="#999"
+                  onChangeText={setFullName}
+                  value={fullName}
+                />
+              </View>
+
+              {isTeacherMode ? (
+                <View style={styles.inputWrapper}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Teacher ID"
+                    placeholderTextColor="#999"
+                    onChangeText={setTeacherId}
+                    value={teacherId}
+                  />
+                </View>
+              ) : (
+                <>
+                  <View style={styles.inputWrapper}>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Course (e.g. Computer Engineering)"
+                      placeholderTextColor="#999"
+                      onChangeText={setCourse}
+                      value={course}
+                    />
+                  </View>
+                  <View style={styles.inputWrapper}>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Year (e.g. SE)"
+                      placeholderTextColor="#999"
+                      onChangeText={setYear}
+                      value={year}
+                    />
+                  </View>
+                </>
+              )}
+
+              <View style={styles.teacherToggle}>
+                <Text style={styles.toggleText}>Faculty Mode</Text>
+                <Switch
+                  value={isTeacherMode}
+                  onValueChange={setIsTeacherMode}                
+                  trackColor={{true: '#2196F3'}}
+                />
+              </View>
+
+              {isTeacherMode && (
+                <View style={[styles.inputWrapper, {borderColor: '#FF9800'}]}>
+                  <ShieldAlert
+                    size={20}
+                    color="#FF9800"
+                    style={{marginRight: 10}}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Admin Key"
+                    onChangeText={setAdminKey}
+                    value={adminKey}
+                    
+                      placeholderTextColor="#999"
+                    autoCapitalize="characters"
+                  />
+                </View>
+              )}
+            </>
+          )}
+
           <View style={styles.inputWrapper}>
-            <Lock size={20} color="#666" style={{ marginRight: 10 }} />
+            <Lock size={20} color="#666" style={{marginRight: 10}} />
             <TextInput
               style={styles.input}
               placeholder="Password"
@@ -113,52 +200,27 @@ export default function Auth() {
           </View>
 
           {/* TEACHER TOGGLE */}
-          <View style={styles.teacherToggle}>
-            <Text style={styles.toggleText}>Faculty Mode</Text>
-            <Switch
-              value={isTeacherMode}
-              onValueChange={setIsTeacherMode}
-              trackColor={{ true: '#2196F3' }}
-            />
-          </View>
-
-          {/* ADMIN KEY INPUT (Only if Teacher Mode is ON) */}
-          {isTeacherMode && (
-            <View style={[styles.inputWrapper, { borderColor: '#FF9800' }]}>
-              <ShieldAlert
-                size={20}
-                color="#FF9800"
-                style={{ marginRight: 10 }}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Enter Admin Key (hint: ADMIN)"
-                placeholderTextColor="#999"
-                onChangeText={setAdminKey}
-                value={adminKey}
-                autoCapitalize="characters"
-              />
-            </View>
-          )}
+         
 
           <View style={styles.buttonContainer}>
             <TouchableOpacity
               style={[styles.button, styles.loginButton]}
-              onPress={() => handleAuth('LOGIN')}
-            >
+              onPress={() => handleAuth(isLoginMode ? 'LOGIN' : 'SIGNUP')}>
               {loading ? (
                 <ActivityIndicator color="#FFF" />
               ) : (
-                <Text style={styles.buttonText}>Sign In</Text>
+                <Text style={styles.buttonText}>
+                  {isLoginMode ? 'Sign In' : 'Create Account'}
+                </Text>
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.button, styles.signupButton]}
-              onPress={() => handleAuth('SIGNUP')}
-            >
-              <Text style={[styles.buttonText, styles.signupText]}>
-                Create Account
+            <TouchableOpacity onPress={() => setIsLoginMode(!isLoginMode)}>
+              <Text
+                style={{textAlign: 'center', color: '#2196F3', marginTop: 10}}>
+                {isLoginMode
+                  ? "Don't have an account? Sign Up"
+                  : 'Already have an account? Login'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -169,17 +231,17 @@ export default function Auth() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFF' },
-  scrollContainer: { flexGrow: 1, justifyContent: 'center', padding: 25 },
-  headerSection: { alignItems: 'center', marginBottom: 40 },
+  container: {flex: 1, backgroundColor: '#FFF'},
+  scrollContainer: {flexGrow: 1, justifyContent: 'center', padding: 25},
+  headerSection: {alignItems: 'center', marginBottom: 40},
   title: {
     fontSize: 32,
     fontWeight: 'bold',
     color: '#2196F3',
     marginBottom: 5,
   },
-  subtitle: { fontSize: 16, color: '#757575' },
-  formSection: { width: '100%' },
+  subtitle: {fontSize: 16, color: '#757575'},
+  formSection: {width: '100%'},
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -191,22 +253,22 @@ const styles = StyleSheet.create({
     borderColor: '#EEE',
     height: 55,
   },
-  input: { flex: 1, fontSize: 16, color: '#333' },
-  buttonContainer: { marginTop: 20, gap: 15 },
+  input: {flex: 1, fontSize: 16, color: '#333'},
+  buttonContainer: {marginTop: 20, gap: 15},
   button: {
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  loginButton: { backgroundColor: '#2196F3', elevation: 2 },
+  loginButton: {backgroundColor: '#2196F3', elevation: 2},
   signupButton: {
     backgroundColor: '#FFF',
     borderWidth: 2,
     borderColor: '#2196F3',
   },
-  buttonText: { fontSize: 16, fontWeight: 'bold', color: '#FFF' },
-  signupText: { color: '#2196F3' },
+  buttonText: {fontSize: 16, fontWeight: 'bold', color: '#FFF'},
+  signupText: {color: '#2196F3'},
   teacherToggle: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -214,5 +276,5 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     paddingHorizontal: 5,
   },
-  toggleText: { fontSize: 16, fontWeight: 'bold', color: '#555' },
+  toggleText: {fontSize: 16, fontWeight: 'bold', color: '#555'},
 });

@@ -20,12 +20,26 @@ import {
   Plus,
   LogOut,
   BarChart2,
+  Mail, 
+  Shield, 
+  BookOpen, 
 } from 'lucide-react-native';
 import {supabase} from './lib/supabase';
 
-// Helper function to safely get the profile email for avatar/seed
+const InfoRow = ({icon: Icon, label, value, isLast = false}: any) => (
+  <View>
+    <View style={styles.infoRow}>
+      <Icon size={20} color="#757575" />
+      <View style={{marginLeft: 10}}>
+        <Text style={styles.infoLabel}>{label}</Text>
+        <Text style={styles.infoValue}>{value}</Text>
+      </View>
+    </View>
+    {!isLast && <View style={styles.infoDivider} />}
+  </View>
+);
+
 const getProfileSeed = (teacher: any) => {
-  // We must assume the teacher prop contains the email or ID for the seed
   return teacher.email || teacher.id || 'teacher@adsum.com';
 };
 
@@ -34,13 +48,13 @@ export default function TeacherDashboard({
   onNavigate,
   onSelectClass,
 }: any) {
+  const [profile, setProfile] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [classes, setClasses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  const teacherEmailSeed = getProfileSeed(teacher);
 
-  const teacherEmailSeed = getProfileSeed(teacher); // Get seed once
-
-  // --- 1. SMART FETCH (Gets Data + Relations) ---
   const fetchClasses = async () => {
     setLoading(true);
     try {
@@ -61,9 +75,28 @@ export default function TeacherDashboard({
     }
   };
 
+  
+
   useEffect(() => {
-    fetchClasses();
-  }, []);
+  const fetchTeacherProfile = async () => {
+    if (!teacher?.id) return; // ✅ Don't fetch if ID is missing yet
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('name, employee_id, email') 
+      .eq('id', teacher.id)
+      .single();
+
+    if (error) {
+      console.error('Profile fetch error:', error.message);
+    } else if (data) {
+      setProfile(data);
+    }
+  };
+
+  fetchClasses();
+  fetchTeacherProfile();
+}, [teacher?.id]); // ✅ Re-run if teacher ID changes/loads
 
   const handleLogout = async () => {
     Alert.alert('Sign Out', 'Are you sure you want to log out?', [
@@ -114,14 +147,12 @@ export default function TeacherDashboard({
               <Text style={styles.metaText}>{displayRoom}</Text>
             </View>
           </View>
-
           <View style={[styles.statusBadge, {backgroundColor: status.bg}]}>
             <Text style={[styles.statusText, {color: status.text}]}>
               {status.label}
             </Text>
           </View>
         </View>
-
         <TouchableOpacity
           style={[
             styles.actionButton,
@@ -154,28 +185,23 @@ export default function TeacherDashboard({
     );
   };
 
-  // --- RENDER CONTENT BASED ON TAB ---
   const renderContent = () => {
     if (activeTab === 'dashboard') {
       return (
         <>
-          {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerTop}>
-              {/* ✅ FIX: Removed unnecessary onPress={logout} here */}
               <View style={styles.profileRow}>
                 <Image
                   source={{
-                    uri:
-                      teacher?.profilePic ||
-                      `https://api.dicebear.com/9.x/initials/png?seed=${
-                        teacher?.email || 'Teacher'
-                      }&backgroundColor=2196F3`,
+                    uri: `https://api.dicebear.com/9.x/initials/png?seed=${profile?.name || teacher.name || teacher.email}&backgroundColor=2196F3&chars=2`,
                   }}
                   style={styles.avatar}
                 />
                 <View>
-                  <Text style={styles.teacherName}>{teacher.name}</Text>
+                  <Text style={styles.teacherName}>
+                    {profile?.name || teacher.name}
+                  </Text>
                   <Text style={{color: '#BBDEFB', fontSize: 12}}>
                     Teacher Dashboard
                   </Text>
@@ -189,7 +215,6 @@ export default function TeacherDashboard({
             </View>
           </View>
 
-          {/* Stats */}
           <View style={styles.statsContainer}>
             <ScrollView
               horizontal
@@ -210,7 +235,6 @@ export default function TeacherDashboard({
             </ScrollView>
           </View>
 
-          {/* List */}
           <View style={styles.listContainer}>
             <Text style={styles.sectionTitle}>Your Classes</Text>
             <FlatList
@@ -238,7 +262,6 @@ export default function TeacherDashboard({
     }
 
     if (activeTab === 'reports') {
-      // Simple Placeholder for Reports Tab
       return (
         <View style={styles.centerContainer}>
           <BarChart2 size={60} color="#E0E0E0" />
@@ -255,19 +278,43 @@ export default function TeacherDashboard({
     }
 
     if (activeTab === 'profile') {
-      // Improved Profile Tab
       return (
         <ScrollView contentContainerStyle={styles.profileContainer}>
           <View style={styles.profileHeader}>
             <Image
               source={{
-                // ✅ FIX: Using the safely defined seed
-                uri: `https://api.dicebear.com/9.x/initials/png?seed=${teacherEmailSeed}&backgroundColor=2196F3&chars=2`,
+                uri: `https://api.dicebear.com/9.x/initials/png?seed=${
+                  profile?.name || teacher.name
+                }&backgroundColor=2196F3&chars=2`,
               }}
               style={styles.bigAvatar}
             />
-            <Text style={styles.bigName}>{teacher.name}</Text>
+            <Text style={styles.bigName}>{profile?.name || teacher.name || 'Loading Name...'}</Text>
             <Text style={styles.roleText}>Faculty Member</Text>
+          </View>
+
+          <View style={styles.infoCard}>
+            <InfoRow
+              icon={User}
+              label="Faculty ID"
+              value={profile?.employee_id || `ID for ${teacher.id.substring(0,5)}...`}
+            />
+            <InfoRow
+              icon={Mail}
+              label="Email Address"
+              value={profile?.email || teacher.email}
+            />
+            <InfoRow
+              icon={Shield}
+              label="Designation"
+              value="Assistant Professor"
+            />
+            <InfoRow
+              icon={BookOpen}
+              label="Total Sessions"
+              value={`${classes.length} Classes Created`}
+              isLast={true}
+            />
           </View>
 
           <View style={styles.menuSection}>
@@ -275,20 +322,16 @@ export default function TeacherDashboard({
               style={styles.menuItem}
               onPress={handleReportClick}>
               <FileText size={20} color="#555" />
-              <Text style={styles.menuText}>My Reports</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem}>
-              <User size={20} color="#555" />
-              <Text style={styles.menuText}>Account Settings</Text>
+              <Text style={styles.menuText}>Download Attendance Reports</Text>
             </TouchableOpacity>
           </View>
 
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
             <LogOut size={20} color="#F44336" />
-            <Text style={styles.logoutText}>Sign Out</Text>
+            <Text style={styles.logoutText}>Sign Out of Adsum</Text>
           </TouchableOpacity>
 
-          <Text style={styles.versionText}>Adsum Teacher v1.0</Text>
+          <Text style={styles.versionText}>Adsum Faculty v1.0.4</Text>
         </ScrollView>
       );
     }
@@ -297,10 +340,8 @@ export default function TeacherDashboard({
   return (
     <View style={styles.container}>
       <StatusBar backgroundColor="#2196F3" barStyle="light-content" />
-
       {renderContent()}
 
-      {/* Bottom Nav */}
       <View style={styles.bottomNav}>
         <TouchableOpacity
           style={styles.navItem}
@@ -358,20 +399,19 @@ const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: '#F5F5F5'},
   header: {
     backgroundColor: '#2196F3',
-    paddingTop: 20,        // Keeps space for status bar
-    paddingHorizontal: 20, // Keeps side spacing
-    paddingBottom: 20,     // ✅ REDUCED from 30 to 20 (Shrinks the bottom gap)
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
-    elevation: 5,          // Adds a nice shadow effect
+    elevation: 5,
   },
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,      // ✅ Adds a little space between buttons and the new Title
+    marginBottom: 10,
   },
-  // Add this new style for the text you want to write
   headerTitle: {
     color: '#FFF',
     fontSize: 22,
@@ -387,7 +427,6 @@ const styles = StyleSheet.create({
   },
   teacherName: {color: '#FFF', fontSize: 18, fontWeight: 'bold'},
   addButton: {backgroundColor: '#FFF', padding: 8, borderRadius: 20},
-
   statsContainer: {marginTop: -25, paddingHorizontal: 15},
   statCard: {
     backgroundColor: '#FFF',
@@ -399,7 +438,6 @@ const styles = StyleSheet.create({
   },
   statLabel: {color: '#757575', fontSize: 12, marginBottom: 5},
   statValue: {fontSize: 24, fontWeight: 'bold'},
-
   listContainer: {flex: 1, padding: 20, marginTop: -10},
   sectionTitle: {
     fontSize: 18,
@@ -407,7 +445,6 @@ const styles = StyleSheet.create({
     color: '#212121',
     marginBottom: 15,
   },
-
   card: {
     backgroundColor: '#FFF',
     borderRadius: 12,
@@ -443,7 +480,6 @@ const styles = StyleSheet.create({
   statusText: {fontSize: 10, fontWeight: 'bold'},
   actionButton: {padding: 12, borderRadius: 8, alignItems: 'center'},
   actionButtonText: {fontWeight: 'bold', fontSize: 14},
-
   bottomNav: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -457,8 +493,6 @@ const styles = StyleSheet.create({
   },
   navItem: {alignItems: 'center'},
   navText: {fontSize: 12, color: '#757575', marginTop: 4},
-
-  // New Styles for Profile & Reports Tabs
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -478,7 +512,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 20,
   },
-
   profileContainer: {padding: 20, paddingBottom: 100},
   profileHeader: {alignItems: 'center', marginTop: 20, marginBottom: 40},
   bigAvatar: {
@@ -491,7 +524,6 @@ const styles = StyleSheet.create({
   },
   bigName: {fontSize: 24, fontWeight: 'bold', color: '#333'},
   roleText: {fontSize: 16, color: '#757575'},
-
   menuSection: {
     backgroundColor: '#FFF',
     borderRadius: 12,
@@ -506,7 +538,6 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F0F0F0',
   },
   menuText: {fontSize: 16, marginLeft: 15, color: '#333'},
-
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -522,4 +553,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   versionText: {textAlign: 'center', color: '#BBB', marginTop: 20},
+  infoCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    elevation: 2,
+    marginBottom: 25,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    gap: 15,
+  },
+  infoDivider: {height: 1, backgroundColor: '#EEE'},
+  infoLabel: {fontSize: 12, color: '#757575'}, // ✅ Added missing style
+  infoValue: {fontSize: 16, color: '#212121', fontWeight: '600'}, // ✅ Added missing style
 });

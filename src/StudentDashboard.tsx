@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, {useState, useEffect} from 'react';
 import {
   View,
   Text,
@@ -24,15 +24,15 @@ import {
   Shield,
   BookOpen,
 } from 'lucide-react-native';
-import Svg, { Circle } from 'react-native-svg';
-import { supabase } from './lib/supabase';
+import Svg, {Circle} from 'react-native-svg';
+import {supabase} from './lib/supabase';
 
 // Helper component for clean Profile rows
-const InfoRow = ({ icon: Icon, label, value, isLast = false }: any) => (
+const InfoRow = ({icon: Icon, label, value, isLast = false}: any) => (
   <View>
     <View style={styles.infoRow}>
       <Icon size={20} color="#757575" />
-      <View style={{ marginLeft: 10 }}>
+      <View style={{marginLeft: 10}}>
         <Text style={styles.infoLabel}>{label}</Text>
         <Text style={styles.infoValue}>{value}</Text>
       </View>
@@ -41,10 +41,25 @@ const InfoRow = ({ icon: Icon, label, value, isLast = false }: any) => (
   </View>
 );
 
-export default function StudentDashboard({ session, onNavigate }: any) {
+export default function StudentDashboard({session, onNavigate}: any) {
+  const [profile, setProfile] = useState<any>(null); // To store real DB data
+  const [profileLoading, setProfileLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('home');
   const [classes, setClasses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const getProfile = async () => {
+      const {data} = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
+      if (data) setProfile(data);
+      setProfileLoading(false);
+    };
+    getProfile();
+  }, [session.user.id]);
 
   // Default values for Profile Tab
   const email = session?.user?.email || 'user@adsum.com';
@@ -55,11 +70,11 @@ export default function StudentDashboard({ session, onNavigate }: any) {
   const fetchLiveClasses = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const {data, error} = await supabase
         .from('sessions')
         .select('*, subjects(*)')
         .eq('is_active', true)
-        .order('created_at', { ascending: false });
+        .order('created_at', {ascending: false});
 
       if (error) throw error;
       setClasses(data || []);
@@ -77,7 +92,7 @@ export default function StudentDashboard({ session, onNavigate }: any) {
   // --- CONSISTENT LOGOUT LOGIC ---
   const handleLogout = async () => {
     Alert.alert('Sign Out', 'Are you sure you want to log out?', [
-      { text: 'Cancel', style: 'cancel' },
+      {text: 'Cancel', style: 'cancel'},
       {
         text: 'Log Out',
         style: 'destructive',
@@ -95,7 +110,7 @@ export default function StudentDashboard({ session, onNavigate }: any) {
   const strokeDashoffset = circumference * (1 - progress);
 
   const getStatusColor = (status: string) => {
-    return { bg: '#4CAF50', text: '#FFFFFF', label: 'Ongoing' };
+    return {bg: '#4CAF50', text: '#FFFFFF', label: 'Ongoing'};
   };
 
   const renderContent = () => {
@@ -111,22 +126,21 @@ export default function StudentDashboard({ session, onNavigate }: any) {
               onRefresh={fetchLiveClasses}
               colors={['#2196F3']}
             />
-          }
-        >
+          }>
           {/* Header */}
           <View style={styles.headerContainer}>
             <View style={styles.headerContent}>
               <View style={styles.userInfo}>
                 <Image
-                  // ✅ FIX 1: Updated Header Avatar
                   source={{
-                    uri: `https://api.dicebear.com/9.x/initials/png?seed=${session.user.email}&backgroundColor=2196F3&chars=2`,
+                    uri: `https://api.dicebear.com/9.x/initials/png?seed=${profile?.name}&backgroundColor=2196F3&chars=2`,
                   }}
                   style={styles.avatar}
                 />
                 <View>
+                  {/* ✅ FIX: Use profile.name from DB, fallback to email prefix if loading */}
                   <Text style={styles.userName}>
-                    {session.user.email?.split('@')[0]}
+                    {profile?.name || session.user.email?.split('@')[0]}
                   </Text>
                   <Text style={styles.userId}>Student</Text>
                 </View>
@@ -138,7 +152,7 @@ export default function StudentDashboard({ session, onNavigate }: any) {
 
             {/* Attendance Summary Card */}
             <View style={styles.summaryCard}>
-              <View style={{ flex: 1 }}>
+              <View style={{flex: 1}}>
                 <Text style={styles.summaryLabel}>Overall Attendance</Text>
                 <Text style={styles.summaryPercent}>87%</Text>
                 <Text style={styles.summarySub}>60 out of 69 classes</Text>
@@ -147,9 +161,8 @@ export default function StudentDashboard({ session, onNavigate }: any) {
                 style={{
                   width: 100,
                   height: 100,
-                  transform: [{ rotate: '-90deg' }],
-                }}
-              >
+                  transform: [{rotate: '-90deg'}],
+                }}>
                 <Svg width={size} height={size}>
                   <Circle
                     cx={size / 2}
@@ -182,15 +195,14 @@ export default function StudentDashboard({ session, onNavigate }: any) {
                 flexDirection: 'row',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-              }}
-            >
+              }}>
               <Text style={styles.sectionTitle}>Today's Schedule</Text>
               {loading && <ActivityIndicator size="small" color="#2196F3" />}
             </View>
 
             {!loading && classes.length === 0 && (
-              <View style={{ padding: 20, alignItems: 'center' }}>
-                <Text style={{ color: '#999' }}>
+              <View style={{padding: 20, alignItems: 'center'}}>
+                <Text style={{color: '#999'}}>
                   No active classes right now.
                 </Text>
               </View>
@@ -203,13 +215,13 @@ export default function StudentDashboard({ session, onNavigate }: any) {
               const displayRoom = item.room_number || 'Room TBD';
               const timeString = new Date(item.created_at).toLocaleTimeString(
                 [],
-                { hour: '2-digit', minute: '2-digit' },
+                {hour: '2-digit', minute: '2-digit'},
               );
 
               return (
                 <View key={item.id} style={styles.classCard}>
                   <View style={styles.cardHeader}>
-                    <View style={{ flex: 1 }}>
+                    <View style={{flex: 1}}>
                       <Text style={styles.className}>{displayName}</Text>
                       <View style={styles.metaRow}>
                         <Clock size={14} color="#757575" />
@@ -223,15 +235,10 @@ export default function StudentDashboard({ session, onNavigate }: any) {
                     <View
                       style={[
                         styles.statusPill,
-                        { backgroundColor: statusColors.bg },
-                      ]}
-                    >
+                        {backgroundColor: statusColors.bg},
+                      ]}>
                       <Text
-                        style={[
-                          styles.statusText,
-                          { color: statusColors.text },
-                        ]}
-                      >
+                        style={[styles.statusText, {color: statusColors.text}]}>
                         {statusColors.label}
                       </Text>
                     </View>
@@ -241,15 +248,14 @@ export default function StudentDashboard({ session, onNavigate }: any) {
                     style={styles.markButton}
                     onPress={() =>
                       onNavigate && onNavigate('mark-attendance', item)
-                    }
-                  >
+                    }>
                     <Text style={styles.markButtonText}>Mark Attendance</Text>
                   </TouchableOpacity>
                 </View>
               );
             })}
           </View>
-          <View style={{ height: 100 }} />
+          <View style={{height: 100}} />
         </ScrollView>
       );
     }
@@ -260,7 +266,7 @@ export default function StudentDashboard({ session, onNavigate }: any) {
         <View style={styles.centerContainer}>
           <FileText size={60} color="#E0E0E0" />
           <Text style={styles.placeholderText}>History Coming Soon</Text>
-          <Text style={{ color: '#999', fontSize: 12 }}>
+          <Text style={{color: '#999', fontSize: 12}}>
             Past attendance records will appear here.
           </Text>
         </View>
@@ -276,34 +282,42 @@ export default function StudentDashboard({ session, onNavigate }: any) {
             <Image
               // ✅ FIX 2: Updated Profile Tab Avatar (The one you asked for!)
               source={{
-                uri: email ? `https://api.dicebear.com/9.x/initials/png?seed=${email}&backgroundColor=2196F3&chars=2` : 'https://via.placeholder.com/150' //backup image,
+                uri: email
+                  ? `https://api.dicebear.com/9.x/initials/png?seed=${profile?.name}&backgroundColor=2196F3&chars=2`
+                  : 'https://via.placeholder.com/150', //backup image,
               }}
               style={styles.bigAvatar}
             />
-            <Text style={styles.bigName}>{email.split('@')[0]}</Text>
+            <Text style={styles.bigName}>{profile?.name || email.split('@')[0]}</Text>
             <Text style={styles.roleText}>{role}</Text>
           </View>
 
           {/* 2. Details Card */}
           <View style={styles.infoCard}>
-            <InfoRow icon={User} label="Student ID" value={id} />
+            {/* Use DB Name or fallback to email prefix */}
+            {/* <InfoRow
+              icon={User}
+              label="Full Name"
+              value={profile?.name || email.split('@')[0]}
+            /> */}
             <InfoRow icon={Mail} label="Email Address" value={email} />
+            {/* Dynamic Course & Year from Supabase */}
             <InfoRow
               icon={Shield}
-              label="Department"
-              value="Computer Engineering"
+              label="Department/Course"
+              value={profile?.course || 'Not Set'}
             />
             <InfoRow
               icon={BookOpen}
-              label="Enrolled Classes"
-              value="4 (Current Semester)"
+              label="Academic Year"
+              value={profile?.year || 'N/A'}
               isLast={true}
             />
           </View>
 
           {/* 3. Logout Button */}
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <LogOut size={22} color="#FFF" style={{ marginRight: 15 }} />
+            <LogOut size={22} color="#FFF" style={{marginRight: 15}} />
             <Text style={styles.logoutText}>Sign Out of Adsum</Text>
           </TouchableOpacity>
 
@@ -322,8 +336,7 @@ export default function StudentDashboard({ session, onNavigate }: any) {
       <View style={styles.bottomNav}>
         <TouchableOpacity
           style={styles.navItem}
-          onPress={() => setActiveTab('home')}
-        >
+          onPress={() => setActiveTab('home')}>
           <Home
             size={24}
             color={activeTab === 'home' ? '#2196F3' : '#757575'}
@@ -331,16 +344,14 @@ export default function StudentDashboard({ session, onNavigate }: any) {
           <Text
             style={[
               styles.navText,
-              activeTab === 'home' && { color: '#2196F3' },
-            ]}
-          >
+              activeTab === 'home' && {color: '#2196F3'},
+            ]}>
             Home
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.navItem}
-          onPress={() => setActiveTab('history')}
-        >
+          onPress={() => setActiveTab('history')}>
           <History
             size={24}
             color={activeTab === 'history' ? '#2196F3' : '#757575'}
@@ -348,16 +359,14 @@ export default function StudentDashboard({ session, onNavigate }: any) {
           <Text
             style={[
               styles.navText,
-              activeTab === 'history' && { color: '#2196F3' },
-            ]}
-          >
+              activeTab === 'history' && {color: '#2196F3'},
+            ]}>
             History
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.navItem}
-          onPress={() => setActiveTab('profile')}
-        >
+          onPress={() => setActiveTab('profile')}>
           <User
             size={24}
             color={activeTab === 'profile' ? '#2196F3' : '#757575'}
@@ -365,9 +374,8 @@ export default function StudentDashboard({ session, onNavigate }: any) {
           <Text
             style={[
               styles.navText,
-              activeTab === 'profile' && { color: '#2196F3' },
-            ]}
-          >
+              activeTab === 'profile' && {color: '#2196F3'},
+            ]}>
             Profile
           </Text>
         </TouchableOpacity>
@@ -377,8 +385,8 @@ export default function StudentDashboard({ session, onNavigate }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
-  scrollContent: { paddingBottom: 20 },
+  container: {flex: 1, backgroundColor: '#F5F5F5'},
+  scrollContent: {paddingBottom: 20},
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -406,11 +414,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
-  userInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#FFF' },
-  userName: { fontSize: 20, fontWeight: 'bold', color: '#FFF', textTransform: 'capitalize' },
-  userId: { fontSize: 14, color: '#BBDEFB' },
-  iconButton: { padding: 4 },
+  userInfo: {flexDirection: 'row', alignItems: 'center', gap: 12},
+  avatar: {width: 48, height: 48, borderRadius: 24, backgroundColor: '#FFF'},
+  userName: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFF',
+    textTransform: 'capitalize',
+  },
+  userId: {fontSize: 14, color: '#BBDEFB'},
+  iconButton: {padding: 4},
 
   summaryCard: {
     position: 'absolute',
@@ -425,15 +438,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.1,
     shadowRadius: 10,
   },
-  summaryLabel: { fontSize: 14, color: '#757575', marginBottom: 4 },
-  summaryPercent: { fontSize: 36, fontWeight: 'bold', color: '#2196F3' },
-  summarySub: { fontSize: 12, color: '#757575', marginTop: 4 },
+  summaryLabel: {fontSize: 14, color: '#757575', marginBottom: 4},
+  summaryPercent: {fontSize: 36, fontWeight: 'bold', color: '#2196F3'},
+  summarySub: {fontSize: 12, color: '#757575', marginTop: 4},
 
-  listSection: { marginTop: 70, paddingHorizontal: 24 },
+  listSection: {marginTop: 70, paddingHorizontal: 24},
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -465,9 +478,9 @@ const styles = StyleSheet.create({
     gap: 6,
     marginBottom: 4,
   },
-  metaText: { fontSize: 14, color: '#757575' },
-  statusPill: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
-  statusText: { fontSize: 12, fontWeight: 'bold' },
+  metaText: {fontSize: 14, color: '#757575'},
+  statusPill: {paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12},
+  statusText: {fontSize: 12, fontWeight: 'bold'},
 
   markButton: {
     backgroundColor: '#2196F3',
@@ -476,7 +489,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 16,
   },
-  markButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
+  markButtonText: {color: '#FFF', fontWeight: 'bold', fontSize: 16},
 
   bottomNav: {
     position: 'absolute',
@@ -490,12 +503,12 @@ const styles = StyleSheet.create({
     borderTopWidth: 0,
     elevation: 10,
   },
-  navItem: { alignItems: 'center' },
-  navText: { fontSize: 12, marginTop: 4, color: '#757575' },
+  navItem: {alignItems: 'center'},
+  navText: {fontSize: 12, marginTop: 4, color: '#757575'},
 
   // --- POLISHED PROFILE STYLES ---
-  profileContainer: { padding: 20, paddingBottom: 100 },
-  profileHeader: { alignItems: 'center', marginTop: 20, marginBottom: 40 },
+  profileContainer: {padding: 20, paddingBottom: 100},
+  profileHeader: {alignItems: 'center', marginTop: 20, marginBottom: 40},
   bigAvatar: {
     width: 100,
     height: 100,
@@ -504,8 +517,8 @@ const styles = StyleSheet.create({
     borderColor: '#FFF',
     marginBottom: 15,
   },
-  bigName: { fontSize: 24, fontWeight: 'bold', color: '#333' },
-  roleText: { fontSize: 16, color: '#757575' },
+  bigName: {fontSize: 24, fontWeight: 'bold', color: '#333'},
+  roleText: {fontSize: 16, color: '#757575'},
 
   infoCard: {
     backgroundColor: '#FFF',
@@ -521,9 +534,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     gap: 15,
   },
-  infoLabel: { fontSize: 12, color: '#757575' },
-  infoValue: { fontSize: 16, color: '#212121', fontWeight: '600' },
-  infoDivider: { height: 1, backgroundColor: '#EEE' },
+  infoLabel: {fontSize: 12, color: '#757575'},
+  infoValue: {fontSize: 16, color: '#212121', fontWeight: '600'},
+  infoDivider: {height: 1, backgroundColor: '#EEE'},
 
   logoutButton: {
     flexDirection: 'row',
@@ -540,5 +553,5 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     fontSize: 16,
   },
-  versionText: { textAlign: 'center', color: '#BBB', marginTop: 20 },
+  versionText: {textAlign: 'center', color: '#BBB', marginTop: 20},
 });

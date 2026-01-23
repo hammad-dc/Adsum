@@ -93,16 +93,17 @@ export default function App() {
 
     return (
       <TeacherDashboard
-        teacher={{
-          name: session.user.email?.split('@')[0],
-          email: session.user.email,
-        }}
-        onNavigate={setCurrentScreen}
-        onSelectClass={(data: any) => {
-          setSelectedData(data);
-          setCurrentScreen('start-session');
-        }}
-      />
+      teacher={{
+        id: session.user.id, // ✅ CRITICAL: Add this line!
+        name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
+        email: session.user.email,
+      }}
+      onNavigate={setCurrentScreen}
+      onSelectClass={(data: any) => {
+        setSelectedData(data);
+        setCurrentScreen('start-session');
+      }}
+    />
     );
   }
 

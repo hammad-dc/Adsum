@@ -22,6 +22,7 @@ export default function Auth() {
   const [course, setCourse] = useState('');
   const [year, setYear] = useState('');
   const [teacherId, setTeacherId] = useState('');
+  const [cprn, setCprn] = useState('');
 
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -59,6 +60,7 @@ export default function Auth() {
               employee_id: isTeacherMode ? teacherId : null,
               course: isTeacherMode ? 'Faculty' : course,
               year: isTeacherMode ? 'N/A' : year,
+              cprn: isTeacherMode ? 'N/A' : cprn,
             },
           },
         });
@@ -103,7 +105,6 @@ export default function Auth() {
             />
           </View>
 
-
           {/* 2. Extra fields ONLY show during Signup */}
           {!isLoginMode && (
             <>
@@ -147,6 +148,17 @@ export default function Auth() {
                       value={year}
                     />
                   </View>
+                  {!isLoginMode && !isTeacherMode && (
+                    <View style={styles.inputWrapper}>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Enter CPRN Number (e.g. 241299)"
+                        value={cprn}
+                        onChangeText={setCprn}
+                        placeholderTextColor="#999"
+                      />
+                    </View>
+                  )}
                 </>
               )}
 
@@ -154,7 +166,7 @@ export default function Auth() {
                 <Text style={styles.toggleText}>Faculty Mode</Text>
                 <Switch
                   value={isTeacherMode}
-                  onValueChange={setIsTeacherMode}                
+                  onValueChange={setIsTeacherMode}
                   trackColor={{true: '#2196F3'}}
                 />
               </View>
@@ -171,8 +183,7 @@ export default function Auth() {
                     placeholder="Admin Key"
                     onChangeText={setAdminKey}
                     value={adminKey}
-                    
-                      placeholderTextColor="#999"
+                    placeholderTextColor="#999"
                     autoCapitalize="characters"
                   />
                 </View>
@@ -200,7 +211,6 @@ export default function Auth() {
           </View>
 
           {/* TEACHER TOGGLE */}
-         
 
           <View style={styles.buttonContainer}>
             <TouchableOpacity

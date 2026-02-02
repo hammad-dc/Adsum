@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Geolocation from 'react-native-geolocation-service';
 import {
   View,
   Text,
@@ -54,55 +55,60 @@ export default function AddNewClass({ onBack, onClassCreated }: any) {
   };
 
   const handleSubmit = async () => {
-    if (!subjectName || !room) {
-      Alert.alert(
-        'Missing Fields',
-        'Please select a subject or type a name and room.',
-      );
-      return;
-    }
+  if (!subjectName || !room) {
+    Alert.alert('Missing Fields', 'Please select a subject or type a name and room.');
+    return;
+  }
 
-    setLoading(true);
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      const newBeaconId = `BEACON-${Math.floor(Math.random() * 10000)}`;
-      const initialCode = Math.floor(1000 + Math.random() * 9000).toString();
+  setLoading(true);
 
-      const { data, error } = await supabase
-        .from('sessions')
-        .insert({
-          beacon_id: newBeaconId,
-          active_code: initialCode,
-          is_active: true,
-          class_name: subjectName,
-          room_number: room,
-          teacher_id: user?.id,
-          subject_id:
-            selectedSubjectId && selectedSubjectId < 900
-              ? selectedSubjectId
-              : null, // Don't send fake IDs
-        })
-        .select()
-        .single();
+  // 1. Get current GPS coordinates first
+  Geolocation.getCurrentPosition(
+    async (position) => {
+      const { latitude, longitude } = position.coords;
+      
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        const newBeaconId = `BEACON-${Math.floor(Math.random() * 10000)}`;
+        const initialCode = Math.floor(1000 + Math.random() * 9000).toString();
 
-      if (error) throw error;
+        // 2. Insert into Supabase WITH the coordinates
+        const { data, error } = await supabase
+          .from('sessions')
+          .insert({
+            beacon_id: newBeaconId,
+            active_code: initialCode,
+            is_active: true,
+            class_name: subjectName,
+            room_number: room,
+            teacher_id: user?.id,
+            gps_lat: latitude,   // ✅ Added
+            gps_long: longitude, // ✅ Added
+            subject_id: selectedSubjectId && selectedSubjectId < 900 ? selectedSubjectId : null,
+          })
+          .select()
+          .single();
 
-      if (onClassCreated) {
-        onClassCreated({
-          ...data,
-          class_name: subjectName,
-          room_number: room,
-        });
+        if (error) throw error;
+
+        if (onClassCreated) {
+          onClassCreated({ ...data, class_name: subjectName, room_number: room });
+        }
+        onBack();
+      } catch (err: any) {
+        Alert.alert('Database Error', err.message);
+      } finally {
+        setLoading(false);
       }
-      onBack();
-    } catch (err: any) {
-      Alert.alert('Error', err.message);
-    } finally {
+    },
+    (error) => {
       setLoading(false);
-    }
-  };
+      Alert.alert('GPS Error', 'Could not get your location. Please check if GPS is on.');
+      console.error(error);
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+  );
+};
 
   return (
     <View style={styles.container}>

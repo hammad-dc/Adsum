@@ -8,9 +8,18 @@ import {
   Alert,
   ScrollView,
   BackHandler,
+  ActivityIndicator,
 } from 'react-native';
 import {requestBluetoothPermissions} from './lib/ble';
-import {ArrowLeft, Pause, RefreshCw, Radio, Eye, Radius} from 'lucide-react-native';
+import {
+  ArrowLeft,
+  Pause,
+  RefreshCw,
+  Radio,
+  Eye,
+  Radius,
+  Info,
+} from 'lucide-react-native';
 import Svg, {Circle} from 'react-native-svg';
 import BLEAdvertiser from 'react-native-ble-advertiser';
 import Geolocation from 'react-native-geolocation-service';
@@ -20,8 +29,17 @@ import ManualOverride from './ManualOverride';
 const APP_UUID = '0000AD50-0000-1000-8000-00805F9B34FB';
 
 export default function StartSession({classSession, onBack}: any) {
+  // Inside export default function StartSession
+  const [loading, setLoading] = useState(false); // ✅ Added missing state
+
+  const [sessionStarted, setSessionStarted] = useState(false);
+
   const [className, setClassName] = useState(
     classSession?.class_name || classSession?.name || 'Loading Class...',
+  );
+
+  const [isAdHoc, setIsAdHoc] = useState(
+    classSession?.is_live_location || false,
   );
 
   const [beaconActive, setBeaconActive] = useState(false);
@@ -40,6 +58,15 @@ export default function StartSession({classSession, onBack}: any) {
     if (!classSession) return;
 
     const fetchClassName = async () => {
+      const syncMode = async () => {
+        const {data} = await supabase
+          .from('sessions')
+          .select('is_live_location')
+          .eq('id', classSession.id)
+          .single();
+        if (data) setIsAdHoc(data.is_live_location);
+      };
+      syncMode();
       const {data} = await supabase
         .from('class_sessions') // Verify this table name in your DB
         .select('class_name, name, subject')
@@ -110,7 +137,8 @@ export default function StartSession({classSession, onBack}: any) {
   useEffect(() => {
     let timer: NodeJS.Timeout;
 
-    if (timerRunning) {
+    // ✅ FIX: Only run the interval if the session has actually started AND timer isn't paused
+    if (sessionStarted && timerRunning) {
       timer = setInterval(() => {
         setCodeExpiry(prev => {
           if (prev <= 1) {
@@ -123,7 +151,7 @@ export default function StartSession({classSession, onBack}: any) {
     }
 
     return () => clearInterval(timer);
-  }, [timerRunning]);
+  }, [sessionStarted, timerRunning]);
 
   // --- Helper Functions ---
 
@@ -206,6 +234,98 @@ export default function StartSession({classSession, onBack}: any) {
     } catch (e) {}
   };
 
+  const handleStartClass = () => {
+    if (!beaconActive) {
+      Alert.alert(
+        '⚠️ Security Warning',
+        'Live Signal (Bluetooth/GPS) is OFF. Students can mark attendance from anywhere using only the code. Proceed?',
+        [
+          {text: 'Cancel', style: 'cancel'},
+          {
+            text: 'Start Anyway',
+            onPress: () => confirmStart(false),
+          },
+          {
+            text: 'Turn On & Start',
+            onPress: () => {
+              startBroadcast();
+              confirmStart(true);
+            },
+          },
+        ],
+      );
+    } else {
+      confirmStart(true);
+    }
+  };
+
+  const confirmStart = async (hardwareRequired: boolean) => {
+    setSessionStarted(true);
+    setTimerRunning(true);
+
+    // Update Supabase so students know the session is officially "Open"
+    await supabase
+      .from('sessions')
+      .update({
+        is_hardware_required: hardwareRequired,
+        is_active: true,
+      })
+      .eq('id', classSession.id);
+  };
+
+  const handleModeToggle = async (newValue: boolean) => {
+    setLoading(true);
+    setIsAdHoc(newValue);
+
+    try {
+      if (newValue) {
+        // 📡 LIVE MODE: Get fresh GPS
+        Geolocation.getCurrentPosition(
+          async pos => {
+            await supabase
+              .from('sessions')
+              .update({
+                is_live_location: true,
+                gps_lat: pos.coords.latitude,
+                gps_long: pos.coords.longitude,
+              })
+              .eq('id', classSession.id);
+            setLoading(false);
+          },
+          err => {
+            setLoading(false);
+            setIsAdHoc(false);
+            Alert.alert('GPS Error', 'Using Fixed Mode instead.');
+          },
+          {enableHighAccuracy: true, timeout: 10000},
+        );
+      } else {
+        // 🏛️ FIXED MODE: Fetch original room coords from 'classrooms' table
+        const {data: roomData} = await supabase
+          .from('classrooms')
+          .select('gps_lat, gps_long')
+          .eq('room_name', classSession.room_number)
+          .single();
+
+        await supabase
+          .from('sessions')
+          .update({
+            is_live_location: false,
+            gps_lat: roomData?.gps_lat,
+            gps_long: roomData?.gps_long,
+          })
+          .eq('id', classSession.id);
+
+        setLoading(false);
+      }
+    } catch (e) {
+      setLoading(false);
+      setIsAdHoc(!newValue);
+    }
+  };
+  //19.1344299
+  //72.8437617
+
   const finalizeClass = async () => {
     Alert.alert('End Class?', 'Stop beacon and save attendance?', [
       {text: 'Cancel', style: 'cancel'},
@@ -255,10 +375,59 @@ export default function StartSession({classSession, onBack}: any) {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* ---------------- LOCATION SECURITY MODE ---------------- */}
+        <View style={styles.card}>
+          <View style={styles.rowBetween}>
+            <View style={styles.rowFill}>
+              {/* ✅ Uses new rowFill style */}
+              <View style={[styles.iconCircle, {backgroundColor: '#E3F2FD'}]}>
+                <Radius color="#2196F3" size={20} />
+              </View>
+              {/* ✅ This View now has flex: 1 to protect the switch */}
+              <View style={{marginLeft: 12, flex: 1}}>
+                <View
+                  style={{flexDirection: 'row', alignItems: 'center', gap: 6}}>
+                  <Text style={styles.cardTitle}>Geofence Mode</Text>
+                  <TouchableOpacity
+                    onPress={() =>
+                      Alert.alert(
+                        'Geofence Security Mode', // ✅ Alert Title
+                        '• LOCKED: Uses the official college coordinates for this room. Best for preventing location cheating.\n\n• LIVE: Uses your current phone GPS. Best for outdoor lectures or temporary room changes.', // ✅ Alert Message
+                      )
+                    }
+                    style={{padding: 4}}>
+                    <Info size={18} color="#2196F3" />
+                  </TouchableOpacity>
+                </View>
+                <Text
+                  style={{color: '#757575', fontSize: 11}}
+                  numberOfLines={1}>
+                  {isAdHoc ? '📍 Verified by Teacher' : '🏫 Verified by Room'}
+                </Text>
+              </View>
+            </View>
+
+            {/* ✅ Switch is now anchored safely to the right */}
+            <View style={styles.switchContainer}>
+              {loading ? (
+                <ActivityIndicator size="small" color="#2196F3" />
+              ) : (
+                <Switch
+                  value={isAdHoc}
+                  onValueChange={handleModeToggle}
+                  trackColor={{false: '#E0E0E0', true: '#90CAF9'}}
+                  thumbColor={isAdHoc ? '#2196F3' : '#f4f3f4'}
+                  style={{width: 50}}
+                />
+              )}
+            </View>
+          </View>
+        </View>
+
         {/* ---------------- SIGNAL CARD ---------------- */}
         <View style={styles.card}>
           <View style={styles.rowBetween}>
-            <View style={styles.row}>
+            <View style={styles.rowFill}>
               <View
                 style={[
                   styles.iconCircle,
@@ -278,13 +447,37 @@ export default function StartSession({classSession, onBack}: any) {
                 </Text>
               </View>
             </View>
-            <Switch
-              value={beaconActive}
-              trackColor={{false: '#E0E0E0', true: '#A5D6A7'}}
-              thumbColor={beaconActive ? '#4CAF50' : '#f4f3f4'}
-              onValueChange={val => (val ? startBroadcast() : stopBroadcast())}
-              style={{transform: [{scaleX: 1.2}, {scaleY: 1.2}]}}
-            />
+
+            <View style={styles.switchContainer}>
+              <Switch
+                value={beaconActive}
+                trackColor={{false: '#E0E0E0', true: '#A5D6A7'}}
+                thumbColor={beaconActive ? '#4CAF50' : '#f4f3f4'}
+                onValueChange={val => {
+                  if (!val) {
+                    Alert.alert(
+                      '⚠️ Disable Hardware Security?',
+                      'Students will be able to mark attendance using ONLY the security code. Bluetooth and Location checks will be bypassed. Are you sure?',
+                      [
+                        {
+                          text: 'Cancel',
+                          style: 'cancel',
+                          onPress: () => setBeaconActive(true),
+                        },
+                        {
+                          text: 'Yes, Disable',
+                          style: 'destructive',
+                          onPress: () => stopBroadcast(),
+                        },
+                      ],
+                    );
+                  } else {
+                    startBroadcast();
+                  }
+                }}
+                style={{width: 50}}
+              />
+            </View>
           </View>
         </View>
 
@@ -294,14 +487,16 @@ export default function StartSession({classSession, onBack}: any) {
 
           <TouchableOpacity
             activeOpacity={0.8}
-            onPress={() => setTimerRunning(!timerRunning)}
-            style={{
-              justifyContent: 'center',
-              alignItems: 'center',
-              marginBottom: 20, 
-              marginTop: 20, 
-            }}>
-            <Svg height={CIRCLE_SIZE} width={CIRCLE_SIZE} viewBox={`0 0 ${CIRCLE_SIZE} ${CIRCLE_SIZE}`}>
+            onPress={
+              sessionStarted
+                ? () => setTimerRunning(!timerRunning)
+                : handleStartClass
+            }
+            style={styles.circleContainer}>
+            <Svg
+              height={CIRCLE_SIZE}
+              width={CIRCLE_SIZE}
+              viewBox={`0 0 ${CIRCLE_SIZE} ${CIRCLE_SIZE}`}>
               <Circle
                 cx={center}
                 cy={center}
@@ -314,40 +509,38 @@ export default function StartSession({classSession, onBack}: any) {
                 cx={center}
                 cy={center}
                 r={RADIUS}
-                stroke={timerRunning ? '#FF9800' : '#BDBDBD'}
+                stroke={
+                  !sessionStarted
+                    ? '#2196F3'
+                    : timerRunning
+                    ? '#FF9800'
+                    : '#BDBDBD'
+                }
                 strokeWidth={STROKE_WIDTH}
                 fill="none"
                 strokeDasharray={circumference}
-                strokeDashoffset={strokeDashoffset}
+                strokeDashoffset={sessionStarted ? strokeDashoffset : 0}
                 strokeLinecap="round"
                 transform={`rotate(-90 ${center} ${center})`}
               />
             </Svg>
 
             <View style={{position: 'absolute', alignItems: 'center'}}>
-              <Text style={[styles.codeText, !timerRunning && {color: '#CCC'}]}>
-                {currentCode}
-              </Text>
-              {timerRunning ? (
+              {!sessionStarted ? (
                 <>
-                  <Text style={styles.expiryText}>{codeExpiry}s left</Text>
-                  <Text style={{fontSize: 12, color: '#BDBDBD', marginTop: 4}}>
-                    (Tap to Pause)
-                  </Text>
+                  <Text style={styles.startLabel}>TAP TO</Text>
+                  <Text style={styles.startActionText}>START CLASS</Text>
                 </>
               ) : (
-                <View style={{alignItems: 'center', marginTop: 2}}>
-                  <Pause size={12} color="#757575" />
+                <>
                   <Text
-                    style={{
-                      fontSize: 12,
-                      color: '#4CAF50',
-                      marginTop: 2,
-                      fontWeight: 'bold',
-                    }}>
-                    Tap to Resume
+                    style={[styles.codeText, !timerRunning && {color: '#CCC'}]}>
+                    {currentCode}
                   </Text>
-                </View>
+                  <Text style={styles.expiryText}>
+                    {timerRunning ? `${codeExpiry}s left` : 'PAUSED'}
+                  </Text>
+                </>
               )}
             </View>
           </TouchableOpacity>
@@ -383,7 +576,9 @@ export default function StartSession({classSession, onBack}: any) {
             style={styles.footerButton}
             onPress={() => setShowManual(true)}>
             <Eye size={24} color="#555" style={{marginRight: 8}} />
-            <Text style={styles.footerText}>Class List / Manual Attendance</Text>
+            <Text style={styles.footerText}>
+              Class List / Manual Attendance
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -429,8 +624,8 @@ const styles = StyleSheet.create({
   // --- HEADER (SLIMMED DOWN) ---
   header: {
     backgroundColor: '#2196F3',
-    flexDirection: 'row',       // Align items side-by-side
-    alignItems: 'center',       // Center vertically
+    flexDirection: 'row', // Align items side-by-side
+    alignItems: 'center', // Center vertically
     paddingTop: 10,
     paddingHorizontal: 16,
     paddingBottom: 8,
@@ -438,6 +633,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 24,
     elevation: 4,
     zIndex: 1,
+    overflow: 'hidden',
   },
   headerTop: {
     marginBottom: 0, // Removed gap between arrow and text
@@ -445,10 +641,11 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: '#FFF',
-    fontSize: 26,      // Big font
-    fontWeight: 'bold',
-    letterSpacing: 0.3,
-    marginLeft: 15,    // ✅ Add space between Arrow and Name
+    fontFamily: 'sans-serif-medium',
+    fontSize: 25, // Big font
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    marginLeft: 15, // ✅ Add space between Arrow and Name
     flex: 1,
   },
   // headerSub removed
@@ -464,7 +661,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#FFF',
     borderRadius: 16,
-    padding: 20,       // ✅ INCREASED padding from 16 to 24
+    padding: 20, // ✅ INCREASED padding from 16 to 24
     marginBottom: 20,
     elevation: 2,
     shadowColor: '#000',
@@ -581,5 +778,41 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#555',
+  },
+  toggleModeText: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    marginBottom: 2,
+    letterSpacing: 0.5,
+  },
+  switchContainer: {
+    marginLeft: 10,
+    minWidth: 60,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  rowFill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1, // ✅ Ensures this side takes only available space
+  },
+  circleContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    marginTop: 20,
+    position: 'relative', // ✅ Essential for absolute positioning of text
+  },
+  startLabel: {
+    fontSize: 12,
+    color: '#757575',
+    fontWeight: '600',
+    letterSpacing: 1,
+  },
+  startActionText: {
+    fontSize: 18,
+    color: '#2196F3',
+    fontWeight: 'bold',
+    marginTop: 2,
   },
 });

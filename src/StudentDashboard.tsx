@@ -1,4 +1,5 @@
 import React, {useState, useEffect} from 'react';
+import AttendanceGrid from './AttendanceGrid'; // Import the new component
 import {
   View,
   Text,
@@ -23,8 +24,8 @@ import {
   Mail,
   Shield,
   BookOpen,
+  Hash,
 } from 'lucide-react-native';
-import Svg, {Circle} from 'react-native-svg';
 import {supabase} from './lib/supabase';
 
 // Helper component for clean Profile rows
@@ -42,12 +43,50 @@ const InfoRow = ({icon: Icon, label, value, isLast = false}: any) => (
 );
 
 export default function StudentDashboard({session, onNavigate}: any) {
+
   const [profile, setProfile] = useState<any>(null); // To store real DB data
   const [profileLoading, setProfileLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('home');
   const [classes, setClasses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [heatmapData, setHeatmapData] = useState<
+    {date: string; count: number}[]
+  >([]);
+
+  // 2. Fetch the actual attendance from Supabase
+  useEffect(() => {
+    const loadData = async () => {
+      const {data, error} = await supabase
+        .from('attendance')
+        .select('created_at')
+        .eq('student_id', session.user.id);
+
+      if (data) {
+        const counts = data.reduce((acc: Record<string, number>, curr: any) => {
+          const date = curr.created_at.split('T')[0];
+          acc[date] = (acc[date] || 0) + 1;
+          return acc;
+        }, {});
+
+        setHeatmapData(
+          Object.keys(counts).map(d => ({
+            date: d,
+            count: counts[d],
+          })),
+        );
+      }
+    };
+    loadData();
+  }, [session.user.id]);
+
+  // 3. Calculate stats for the "Flip" side of the card
+  const totalAttended = heatmapData.length;
+  const TOTAL_LECTURES_SCHEDULED = 69; // We should make this dynamic later!
+  const attendancePercentage =
+    TOTAL_LECTURES_SCHEDULED > 0
+      ? Math.round((totalAttended / TOTAL_LECTURES_SCHEDULED) * 100)
+      : 0;
   useEffect(() => {
     const getProfile = async () => {
       const {data} = await supabase
@@ -101,13 +140,6 @@ export default function StudentDashboard({session, onNavigate}: any) {
     ]);
   };
 
-  // --- Chart Calculations ---
-  const size = 100;
-  const strokeWidth = 10;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const progress = 0.87;
-  const strokeDashoffset = circumference * (1 - progress);
 
   const getStatusColor = (status: string) => {
     return {bg: '#4CAF50', text: '#FFFFFF', label: 'Ongoing'};
@@ -138,55 +170,20 @@ export default function StudentDashboard({session, onNavigate}: any) {
                   style={styles.avatar}
                 />
                 <View>
-                  {/* ✅ FIX: Use profile.name from DB, fallback to email prefix if loading */}
                   <Text style={styles.userName}>
                     {profile?.name || session.user.email?.split('@')[0]}
                   </Text>
-                  <Text style={styles.userId}>Student</Text>
+                  <Text style={styles.userId}>Student Dashboard</Text>
                 </View>
-              </View>
-              <TouchableOpacity style={styles.iconButton}>
-                <Bell color="#FFF" size={24} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Attendance Summary Card */}
-            <View style={styles.summaryCard}>
-              <View style={{flex: 1}}>
-                <Text style={styles.summaryLabel}>Overall Attendance</Text>
-                <Text style={styles.summaryPercent}>87%</Text>
-                <Text style={styles.summarySub}>60 out of 69 classes</Text>
-              </View>
-              <View
-                style={{
-                  width: 100,
-                  height: 100,
-                  transform: [{rotate: '-90deg'}],
-                }}>
-                <Svg width={size} height={size}>
-                  <Circle
-                    cx={size / 2}
-                    cy={size / 2}
-                    r={radius}
-                    stroke="#E3F2FD"
-                    strokeWidth={strokeWidth}
-                    fill="none"
-                  />
-                  <Circle
-                    cx={size / 2}
-                    cy={size / 2}
-                    r={radius}
-                    stroke="#2196F3"
-                    strokeWidth={strokeWidth}
-                    fill="none"
-                    strokeDasharray={circumference}
-                    strokeDashoffset={strokeDashoffset}
-                    strokeLinecap="round"
-                  />
-                </Svg>
               </View>
             </View>
           </View>
+          <AttendanceGrid
+            heatmapData={heatmapData}
+            attendancePercentage={attendancePercentage}
+            totalAttended={totalAttended}
+            totalLectures={TOTAL_LECTURES_SCHEDULED}
+          />
 
           {/* List Section */}
           <View style={styles.listSection}>
@@ -288,7 +285,9 @@ export default function StudentDashboard({session, onNavigate}: any) {
               }}
               style={styles.bigAvatar}
             />
-            <Text style={styles.bigName}>{profile?.name || email.split('@')[0]}</Text>
+            <Text style={styles.bigName}>
+              {profile?.name || email.split('@')[0]}
+            </Text>
             <Text style={styles.roleText}>{role}</Text>
           </View>
 
@@ -300,6 +299,11 @@ export default function StudentDashboard({session, onNavigate}: any) {
               label="Full Name"
               value={profile?.name || email.split('@')[0]}
             /> */}
+            <InfoRow
+              icon={Hash}
+              label="CPRN Number"
+              value={profile?.cprn || 'Not Assigned'}
+            />
             <InfoRow icon={Mail} label="Email Address" value={email} />
             {/* Dynamic Course & Year from Supabase */}
             <InfoRow
@@ -401,19 +405,21 @@ const styles = StyleSheet.create({
   },
 
   headerContainer: {
-    backgroundColor: '#2196F3',
-    paddingTop: 20,
-    paddingBottom: 80,
-    paddingHorizontal: 24,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+  backgroundColor: '#2196F3', 
+  paddingTop: 20, // Reduced for a slimmer look
+  paddingBottom: 45, // Reduced to pull the card up
+  paddingHorizontal: 20, 
+  borderBottomLeftRadius: 24, 
+  borderBottomRightRadius: 24
   },
   headerContent: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    // justifyContent: 'space-between',
+    gap: 12,
     alignItems: 'center',
-    marginBottom: 20,
+    // marginBottom: 20,
   },
+  
   userInfo: {flexDirection: 'row', alignItems: 'center', gap: 12},
   avatar: {width: 48, height: 48, borderRadius: 24, backgroundColor: '#FFF'},
   userName: {
@@ -421,37 +427,17 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFF',
     textTransform: 'capitalize',
+    lineHeight: 24,
   },
   userId: {fontSize: 14, color: '#BBDEFB'},
   iconButton: {padding: 4},
 
-  summaryCard: {
-    position: 'absolute',
-    bottom: -50,
-    left: 24,
-    right: 24,
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-  },
-  summaryLabel: {fontSize: 14, color: '#757575', marginBottom: 4},
-  summaryPercent: {fontSize: 36, fontWeight: 'bold', color: '#2196F3'},
-  summarySub: {fontSize: 12, color: '#757575', marginTop: 4},
-
-  listSection: {marginTop: 70, paddingHorizontal: 24},
+  listSection: {marginTop: 15, paddingHorizontal: 20},
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#212121',
-    marginBottom: 16,
+    marginBottom: 12,
   },
 
   classCard: {

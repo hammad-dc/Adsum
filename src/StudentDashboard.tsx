@@ -43,12 +43,11 @@ const InfoRow = ({icon: Icon, label, value, isLast = false}: any) => (
 );
 
 export default function StudentDashboard({session, onNavigate}: any) {
-
   const [profile, setProfile] = useState<any>(null); // To store real DB data
   const [profileLoading, setProfileLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('home');
   const [classes, setClasses] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const [heatmapData, setHeatmapData] = useState<
     {date: string; count: number}[]
@@ -89,44 +88,55 @@ export default function StudentDashboard({session, onNavigate}: any) {
       : 0;
   useEffect(() => {
     const getProfile = async () => {
-      const {data} = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', session.user.id)
-        .single();
-      if (data) setProfile(data);
-      setProfileLoading(false);
+      setProfileLoading(true);
+      try {
+        const {data, error} = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        if (data) setProfile(data);
+      } catch (err) {
+        console.error('Profile Load Error:', err);
+      } finally {
+        setProfileLoading(false);
+      }
     };
     getProfile();
   }, [session.user.id]);
-
   // Default values for Profile Tab
   const email = session?.user?.email || 'user@adsum.com';
   const role = 'Student';
   const id = 'S-2025-001';
 
-  // --- 1. FETCH LIVE CLASSES ---
+  // --- 1. REFACTORED: FETCH LIVE CLASSES (COHORT-AWARE) ---
   const fetchLiveClasses = async () => {
+    if (!profile?.semester) return;
     setLoading(true);
     try {
       const {data, error} = await supabase
         .from('sessions')
-        .select('*, subjects(*)')
+        .select('*, subjects!inner(*)') // !inner ensures clean join
         .eq('is_active', true)
+        .eq('subjects.target_course', profile.course)
+        .eq('subjects.target_year', profile.year)
+        .eq('subjects.target_semester', profile.semester)
+        // ONLY show if it's Theory (ALL) OR matches their specific Batch (A/B/C)
+        .or(`target_batch.eq.ALL,target_batch.eq.${profile.batch}`)
         .order('created_at', {ascending: false});
 
       if (error) throw error;
       setClasses(data || []);
     } catch (err) {
-      console.error('Error fetching student classes:', err);
+      console.error('Filtering Error:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchLiveClasses();
-  }, []);
+    if (profile) fetchLiveClasses();
+  }, [profile]);
 
   // --- CONSISTENT LOGOUT LOGIC ---
   const handleLogout = async () => {
@@ -139,7 +149,6 @@ export default function StudentDashboard({session, onNavigate}: any) {
       },
     ]);
   };
-
 
   const getStatusColor = (status: string) => {
     return {bg: '#4CAF50', text: '#FFFFFF', label: 'Ongoing'};
@@ -220,6 +229,17 @@ export default function StudentDashboard({session, onNavigate}: any) {
                   <View style={styles.cardHeader}>
                     <View style={{flex: 1}}>
                       <Text style={styles.className}>{displayName}</Text>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 'bold',
+                          color: '#2196F3',
+                          marginBottom: 4,
+                        }}>
+                        {item.target_batch === 'ALL'
+                          ? 'Theory Lecture'
+                          : `Practical - Batch ${item.target_batch}`}
+                      </Text>
                       <View style={styles.metaRow}>
                         <Clock size={14} color="#757575" />
                         <Text style={styles.metaText}>{timeString}</Text>
@@ -405,12 +425,12 @@ const styles = StyleSheet.create({
   },
 
   headerContainer: {
-  backgroundColor: '#2196F3', 
-  paddingTop: 20, // Reduced for a slimmer look
-  paddingBottom: 45, // Reduced to pull the card up
-  paddingHorizontal: 20, 
-  borderBottomLeftRadius: 24, 
-  borderBottomRightRadius: 24
+    backgroundColor: '#2196F3',
+    paddingTop: 20, // Reduced for a slimmer look
+    paddingBottom: 45, // Reduced to pull the card up
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
   },
   headerContent: {
     flexDirection: 'row',
@@ -419,7 +439,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     // marginBottom: 20,
   },
-  
+
   userInfo: {flexDirection: 'row', alignItems: 'center', gap: 12},
   avatar: {width: 48, height: 48, borderRadius: 24, backgroundColor: '#FFF'},
   userName: {

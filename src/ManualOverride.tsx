@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, {useState, useEffect} from 'react';
 import {
   View,
   Text,
@@ -18,7 +18,7 @@ import {
   XCircle,
   AlertTriangle,
 } from 'lucide-react-native';
-import { supabase } from './lib/supabase';
+import {supabase} from './lib/supabase';
 
 export default function ManualOverride({
   visible,
@@ -32,32 +32,80 @@ export default function ManualOverride({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // 1. Fetch Data
+  // --- 1. REFACTORED: SAFE DATA ACCESS ---
+  // --- REFACTORED FOR ARRAY ACCESS ---
   const fetchData = async () => {
     try {
       setLoading(true);
-      // Get all students
-      const { data: allStudents } = await supabase
+
+      const {data: currentSession, error: sessionError} = await supabase
+        .from('sessions')
+        .select(
+          `
+        target_batch,
+        subjects!inner (
+          target_course,
+          target_year,
+          target_semester
+        )
+      `,
+        )
+        .eq('id', classSession.id)
+        .single();
+
+      if (sessionError || !currentSession) {
+        console.error('Session fetch error:', sessionError);
+        return;
+      }
+
+      // Access the first element of the subjects array
+      // Supabase often returns joins as arrays unless strictly typed otherwise
+      const subjectData = Array.isArray(currentSession.subjects)
+        ? currentSession.subjects[0]
+        : currentSession.subjects;
+
+      if (!subjectData) {
+        console.error('No subject data found for this session');
+        return;
+      }
+
+      let studentQuery = supabase
         .from('profiles')
         .select('*')
         .eq('role', 'student')
-        .order('name');
+        .eq('course', subjectData.target_course) // Accessing properties safely
+        .eq('year', subjectData.target_year) // Accessing properties safely
+        .eq('semester', subjectData.target_semester); // Accessing properties safely
 
-      // Get present students
-      const { data: present } = await supabase
+      if (currentSession.target_batch !== 'ALL') {
+        studentQuery = studentQuery.eq('batch', currentSession.target_batch);
+      }
+
+      const {data: allStudents} = await studentQuery.order('name');
+      const {data: present} = await supabase
         .from('attendance')
-        .select('student_id')
+        .select('student_id, device_id') // Added device_id for security checks
         .eq('session_id', classSession.id);
-      const presentSet = new Set(present?.map(p => p.student_id));
+
+      // E. Map attendance status and flag suspected proxies
+      const presentMap = new Map(
+        present?.map(p => [p.student_id, p.device_id]),
+      );
 
       const list =
         allStudents?.map(s => ({
           ...s,
-          isPresent: presentSet.has(s.id),
+          isPresent: presentMap.has(s.id),
+          // Flag if the device used doesn't match the student's primary device
+          isProxySuspected:
+            presentMap.has(s.id) &&
+            s.primary_device_id !== (presentMap.get(s.id) || ''),
         })) || [];
-
       setStudents(list);
+
+      // ... rest of your mapping logic ...
     } catch (err) {
-      console.error(err);
+      console.error('Manual Override Fetch Error:', err);
     } finally {
       setLoading(false);
     }
@@ -95,7 +143,7 @@ export default function ManualOverride({
       'Revoke Attendance?',
       `Are you sure you want to mark ${name} as Absent/Suspicious?`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        {text: 'Cancel', style: 'cancel'},
         {
           text: 'Mark Absent',
           style: 'destructive',
@@ -120,7 +168,7 @@ export default function ManualOverride({
     setSelectedIds(newSet);
   };
 
-  const renderItem = ({ item }: any) => {
+  const renderItem = ({item}: any) => {
     const isSelected = selectedIds.has(item.id);
 
     return (
@@ -132,8 +180,17 @@ export default function ManualOverride({
             }}
             style={styles.avatar}
           />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.name}>{item.name}</Text>
+          <View style={{flex: 1}}>
+            <View style={styles.nameRow}>
+              <Text style={styles.name}>{item.name}</Text>
+              {/* ⚠️ Proxy Warning Badge */}
+              {item.isProxySuspected && (
+                <View style={styles.proxyBadge}>
+                  <AlertTriangle size={12} color="#FF9800" />
+                  <Text style={styles.proxyText}>Proxy?</Text>
+                </View>
+              )}
+            </View>
             <Text style={styles.subText}>{item.student_id}</Text>
           </View>
 
@@ -141,8 +198,7 @@ export default function ManualOverride({
           {item.isPresent ? (
             <TouchableOpacity
               style={styles.verifiedBadge}
-              onPress={() => removeStudent(item.id, item.name)}
-            >
+              onPress={() => removeStudent(item.id, item.name)}>
               <CheckCircle size={20} color="#4CAF50" />
               <Text style={styles.verifiedText}>Verified</Text>
             </TouchableOpacity>
@@ -164,8 +220,7 @@ export default function ManualOverride({
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle="pageSheet"
-    >
+      presentationStyle="pageSheet">
       <View style={styles.container}>
         <View style={styles.header}>
           <View style={styles.row}>
@@ -195,17 +250,15 @@ export default function ManualOverride({
               )}
               renderItem={renderItem}
               keyExtractor={item => item.id}
-              contentContainerStyle={{ paddingBottom: 100 }}
+              contentContainerStyle={{paddingBottom: 100}}
             />
           )}
         </View>
-
         {selectedIds.size > 0 && (
           <View style={styles.footer}>
             <TouchableOpacity
               style={styles.submitButton}
-              onPress={submitMarkPresent}
-            >
+              onPress={submitMarkPresent}>
               <Text style={styles.submitText}>
                 Mark {selectedIds.size} Students Present
               </Text>
@@ -218,7 +271,7 @@ export default function ManualOverride({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F7FA' },
+  container: {flex: 1, backgroundColor: '#F5F7FA'},
   header: {
     backgroundColor: '#2196F3',
     padding: 20,
@@ -231,7 +284,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 15,
   },
-  row: { flexDirection: 'row', alignItems: 'center' },
+  row: {flexDirection: 'row', alignItems: 'center'},
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -241,8 +294,8 @@ const styles = StyleSheet.create({
     marginTop: 15,
     height: 45,
   },
-  input: { flex: 1, marginLeft: 10 },
-  content: { flex: 1, padding: 15 },
+  input: {flex: 1, marginLeft: 10},
+  content: {flex: 1, padding: 15},
   card: {
     backgroundColor: '#FFF',
     padding: 15,
@@ -257,8 +310,27 @@ const styles = StyleSheet.create({
     backgroundColor: '#EEE',
     marginRight: 15,
   },
-  name: { fontSize: 16, fontWeight: 'bold', color: '#333' },
-  subText: { color: '#757575', fontSize: 12 },
+  name: {fontSize: 16, fontWeight: 'bold', color: '#333'},
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  proxyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3E0',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  proxyText: {
+    color: '#E65100',
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginLeft: 4,
+  },
+  subText: {color: '#757575', fontSize: 12},
   circle: {
     width: 24,
     height: 24,
@@ -277,7 +349,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 4,
   },
-  verifiedText: { fontSize: 12, color: '#4CAF50', fontWeight: 'bold' },
+  verifiedText: {fontSize: 12, color: '#4CAF50', fontWeight: 'bold'},
 
   footer: {
     position: 'absolute',
@@ -296,5 +368,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     elevation: 3,
   },
-  submitText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
+  submitText: {color: '#FFF', fontWeight: 'bold', fontSize: 16},
 });

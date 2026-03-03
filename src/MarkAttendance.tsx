@@ -21,6 +21,8 @@ import {supabase} from './lib/supabase';
 import {manager, requestBluetoothPermissions} from './lib/ble';
 import Geolocation from 'react-native-geolocation-service';
 import {getDistanceFromLatLonInMeters} from './lib/location';
+// --- SURGICAL CHANGE: ADD DEVICE INFO IMPORT ---
+import DeviceInfo from 'react-native-device-info';
 
 const SERVICE_UUID = '0000AD50-0000-1000-8000-00805F9B34FB';
 const SHORT_UUID = 'AD50';
@@ -143,10 +145,13 @@ export default function MarkAttendance({classSession, onBack}: any) {
       } = await supabase.auth.getUser();
       if (!user) throw new Error('User session lost. Restart app.');
 
+      const currentDeviceId = DeviceInfo.getUniqueIdSync();//Capture current hardware ID
+
       const {error} = await supabase.from('attendance').insert({
         session_id: classData.id,
         student_id: user.id,
         status: 'present',
+        device_id: currentDeviceId,
         verification_method: 'biometric', // keeping existing logic
         location_verified: gpsVerified,
         bluetooth_verified: bleFound,

@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import {supabase} from './lib/supabase';
 import {Lock, Mail, Eye, EyeOff, ShieldAlert} from 'lucide-react-native';
+import DeviceInfo from 'react-native-device-info';
 
 export default function Auth() {
   const [isLoginMode, setIsLoginMode] = useState(true); // Default to Login
@@ -21,8 +22,10 @@ export default function Auth() {
   const [fullName, setFullName] = useState('');
   const [course, setCourse] = useState('');
   const [year, setYear] = useState('');
+  const [semester, setSemester] = useState('');
   const [teacherId, setTeacherId] = useState('');
   const [cprn, setCprn] = useState('');
+  const [batch, setBatch] = useState('A'); // Default to A
 
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -49,23 +52,26 @@ export default function Auth() {
     setLoading(true);
     try {
       if (type === 'SIGNUP') {
-        const role = isTeacherMode ? 'teacher' : 'student';
+        const deviceId = !isTeacherMode ? DeviceInfo.getUniqueIdSync() : 'N/A'; // No need to store for teacher
+
         const {error} = await supabase.auth.signUp({
           email,
           password,
           options: {
             data: {
               full_name: fullName,
-              role: role,
-              employee_id: isTeacherMode ? teacherId : null,
+              role: isTeacherMode ? 'teacher' : 'student',
+              primary_device_id: deviceId, // LOCK the device here
               course: isTeacherMode ? 'Faculty' : course,
               year: isTeacherMode ? 'N/A' : year,
+              semester: isTeacherMode ? 'N/A' : semester, // Finalized for your CE Sem 4 sprint
               cprn: isTeacherMode ? 'N/A' : cprn,
+              batch: isTeacherMode ? 'N/A' : batch,
             },
           },
         });
         if (error) throw error;
-        Alert.alert('Success', 'Account created! Please sign in.');
+        Alert.alert('Success', 'Account created!');
       } else {
         const {error} = await supabase.auth.signInWithPassword({
           email,
@@ -148,6 +154,16 @@ export default function Auth() {
                       value={year}
                     />
                   </View>
+                  <View style={styles.inputWrapper}>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Semester (e.g., 4)"
+                      placeholderTextColor="#999"
+                      keyboardType="number-pad" // Makes it easier to type numbers
+                      onChangeText={setSemester}
+                      value={semester}
+                    />
+                  </View>
                   {!isLoginMode && !isTeacherMode && (
                     <View style={styles.inputWrapper}>
                       <TextInput
@@ -159,9 +175,58 @@ export default function Auth() {
                       />
                     </View>
                   )}
+                  {!isTeacherMode && (
+                    <View
+                      style={[
+                        styles.batchSelectorContainer,
+                        {marginTop: 0, marginBottom: 15},
+                      ]}>
+                      <Text style={styles.label}>Select Your Batch:</Text>
+                      <View style={styles.batchRow}>
+                        {['A', 'B', 'C'].map(b => (
+                          <TouchableOpacity
+                            key={b}
+                            style={[
+                              styles.batchBtn,
+                              batch === b && styles.batchBtnActive,
+                            ]}
+                            onPress={() => setBatch(b)}>
+                            <Text
+                              style={[
+                                styles.batchBtnText,
+                                batch === b && styles.batchBtnTextActive,
+                              ]}>
+                              Batch {b}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  )}
                 </>
               )}
-
+            </>
+          )}
+          <View style={styles.inputWrapper}>
+            <Lock size={20} color="#666" style={{marginRight: 10}} />
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              placeholderTextColor="#999"
+              secureTextEntry={!showPassword}
+              onChangeText={setPassword}
+              value={password}
+            />
+            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+              {showPassword ? (
+                <EyeOff size={20} color="#666" />
+              ) : (
+                <Eye size={20} color="#666" />
+              )}
+            </TouchableOpacity>
+          </View>
+          {!isLoginMode && (
+            <>
               <View style={styles.teacherToggle}>
                 <Text style={styles.toggleText}>Faculty Mode</Text>
                 <Switch
@@ -190,25 +255,6 @@ export default function Auth() {
               )}
             </>
           )}
-
-          <View style={styles.inputWrapper}>
-            <Lock size={20} color="#666" style={{marginRight: 10}} />
-            <TextInput
-              style={styles.input}
-              placeholder="Password"
-              placeholderTextColor="#999"
-              secureTextEntry={!showPassword}
-              onChangeText={setPassword}
-              value={password}
-            />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-              {showPassword ? (
-                <EyeOff size={20} color="#666" />
-              ) : (
-                <Eye size={20} color="#666" />
-              )}
-            </TouchableOpacity>
-          </View>
 
           {/* TEACHER TOGGLE */}
 
@@ -263,6 +309,25 @@ const styles = StyleSheet.create({
     borderColor: '#EEE',
     height: 55,
   },
+  batchSelectorContainer: {
+    marginVertical: 10,
+    marginBottom: 20,
+    paddingHorizontal: 5,
+  },
+  label: {color: '#666', marginBottom: 8, fontSize: 14, fontWeight: '600'},
+  batchRow: {flexDirection: 'row', justifyContent: 'space-between', gap: 10},
+  batchBtn: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#DDD',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+  },
+  batchBtnActive: {borderColor: '#2196F3', backgroundColor: '#E3F2FD'},
+  batchBtnText: {color: '#757575', fontWeight: 'bold'},
+  batchBtnTextActive: {color: '#2196F3'},
   input: {flex: 1, fontSize: 16, color: '#333'},
   buttonContainer: {marginTop: 20, gap: 15},
   button: {

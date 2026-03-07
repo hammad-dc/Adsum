@@ -64,3 +64,6 @@ yarn-error.log
 
 # testing
 /coverage
+
+#file to protect the Supabase api key
+src/keys.ts

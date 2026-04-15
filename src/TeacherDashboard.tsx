@@ -20,9 +20,9 @@ import {
   Plus,
   LogOut,
   BarChart2,
-  Mail, 
-  Shield, 
-  BookOpen, 
+  Mail,
+  Shield,
+  BookOpen,
 } from 'lucide-react-native';
 import {supabase} from './lib/supabase';
 
@@ -52,22 +52,36 @@ export default function TeacherDashboard({
   const [activeTab, setActiveTab] = useState('dashboard');
   const [classes, setClasses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
+  const [assignedSubjects, setAssignedSubjects] = useState<any[]>([]); // For the bottom list
+
   const teacherEmailSeed = getProfileSeed(teacher);
 
   const fetchClasses = async () => {
     setLoading(true);
+
+    console.log('🔍 Fetching for Teacher ID:', teacher.id); // DEBUG
+
     try {
-      const {data, error} = await supabase
+      const {data: activeSessions, error: sessErr} = await supabase
         .from('sessions')
         .select('*, subjects(*)')
+        .eq('teacher_id', teacher.id)
+        .eq('is_active', true)
         .order('created_at', {ascending: false});
 
-      if (error) {
-        console.error('Supabase Error:', error.message);
-      } else {
-        setClasses(data || []);
-      }
+      const {data: assignedSubjects, error: subErr} = await supabase
+        .from('subjects')
+        .select('*')
+        .eq('teacher_id', teacher.id);
+
+      console.log('📚 Assigned Subjects Found:', assignedSubjects?.length);
+
+      console.log('📡 Live Sessions Found:', activeSessions?.length);
+      if (sessErr || subErr) throw sessErr || subErr;
+      // if (sessError) throw sessError;
+
+      setClasses(activeSessions || []);
+      setAssignedSubjects(assignedSubjects || []); // 👈 THIS was missing!
     } catch (err) {
       console.error('Fetch failed:', err);
     } finally {
@@ -75,28 +89,26 @@ export default function TeacherDashboard({
     }
   };
 
-  
-
   useEffect(() => {
-  const fetchTeacherProfile = async () => {
-    if (!teacher?.id) return; // ✅ Don't fetch if ID is missing yet
+    const fetchTeacherProfile = async () => {
+      if (!teacher?.id) return; // ✅ Don't fetch if ID is missing yet
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('name, employee_id, email') 
-      .eq('id', teacher.id)
-      .single();
+      const {data, error} = await supabase
+        .from('profiles')
+        .select('name, employee_id, email')
+        .eq('id', teacher.id)
+        .single();
 
-    if (error) {
-      console.error('Profile fetch error:', error.message);
-    } else if (data) {
-      setProfile(data);
-    }
-  };
+      if (error) {
+        console.error('Profile fetch error:', error.message);
+      } else if (data) {
+        setProfile(data);
+      }
+    };
 
-  fetchClasses();
-  fetchTeacherProfile();
-}, [teacher?.id]); // ✅ Re-run if teacher ID changes/loads
+    fetchClasses();
+    fetchTeacherProfile();
+  }, [teacher?.id]); // ✅ Re-run if teacher ID changes/loads
 
   const handleLogout = async () => {
     Alert.alert('Sign Out', 'Are you sure you want to log out?', [
@@ -194,7 +206,9 @@ export default function TeacherDashboard({
               <View style={styles.profileRow}>
                 <Image
                   source={{
-                    uri: `https://api.dicebear.com/9.x/initials/png?seed=${profile?.name || teacher.name || teacher.email}&backgroundColor=2196F3&chars=2`,
+                    uri: `https://api.dicebear.com/9.x/initials/png?seed=${
+                      profile?.name || teacher.name || teacher.email
+                    }&backgroundColor=2196F3&chars=2`,
                   }}
                   style={styles.avatar}
                 />
@@ -235,28 +249,58 @@ export default function TeacherDashboard({
             </ScrollView>
           </View>
 
-          <View style={styles.listContainer}>
-            <Text style={styles.sectionTitle}>Your Classes</Text>
-            <FlatList
-              data={classes}
-              keyExtractor={item => item.id.toString()}
-              renderItem={renderClassItem}
-              contentContainerStyle={{paddingBottom: 100}}
-              refreshControl={
-                <RefreshControl
-                  refreshing={loading}
-                  onRefresh={fetchClasses}
-                  colors={['#2196F3']}
-                />
-              }
-              ListEmptyComponent={
-                <Text
-                  style={{textAlign: 'center', marginTop: 50, color: '#999'}}>
-                  No classes created yet.
-                </Text>
-              }
-            />
-          </View>
+          <ScrollView
+            contentContainerStyle={{flexGrow: 1}} // Allows the content to stretch and scroll
+            showsVerticalScrollIndicator={false}>
+            <View style={styles.listContainer}>
+              {/* --- UPPER PART: ONGOING SESSIONS --- */}
+              <Text style={styles.sectionTitle}>Ongoing Sessions</Text>
+              <View style={styles.ongoingWrapper}>
+                {classes && classes.length > 0 ? (
+                  classes.map(item => (
+                    <View key={`ongoing-${item.id}`}>
+                      {renderClassItem({item})}
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.emptyText}>
+                    No sessions active right now.
+                  </Text>
+                )}
+              </View>
+
+              {/* --- LOWER PART: ASSIGNED SUBJECTS --- */}
+              <Text style={[styles.sectionTitle, {marginTop: 25}]}>
+                Your Assigned Subjects
+              </Text>
+
+              {/* ✅ Convert FlatList to .map() to fix the scrolling bug */}
+              <View style={styles.assignedWrapper}>
+                {assignedSubjects.map(item => (
+                  <TouchableOpacity
+                    key={`assigned-${item.id}`}
+                    style={styles.subjectCard}
+                    onPress={() =>
+                      onNavigate && onNavigate('add-class', {subject: item})
+                    }>
+                    <View style={styles.subjectIcon}>
+                      <BookOpen color="#2196F3" size={20} />
+                    </View>
+                    <View style={{flex: 1}}>
+                      <Text style={styles.subjectName}>{item.name}</Text>
+                      <Text style={styles.subjectMeta}>
+                        {item.type} • Sem {item.target_semester}
+                      </Text>
+                    </View>
+                    <Plus color="#2196F3" size={20} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* ✅ Extra space at the bottom to ensure the last item clears the Nav Bar */}
+              <View style={{height: 120}} />
+            </View>
+          </ScrollView>
         </>
       );
     }
@@ -289,7 +333,9 @@ export default function TeacherDashboard({
               }}
               style={styles.bigAvatar}
             />
-            <Text style={styles.bigName}>{profile?.name || teacher.name || 'Loading Name...'}</Text>
+            <Text style={styles.bigName}>
+              {profile?.name || teacher.name || 'Loading Name...'}
+            </Text>
             <Text style={styles.roleText}>Faculty Member</Text>
           </View>
 
@@ -297,7 +343,10 @@ export default function TeacherDashboard({
             <InfoRow
               icon={User}
               label="Faculty ID"
-              value={profile?.employee_id || `ID for ${teacher.id.substring(0,5)}...`}
+              value={
+                profile?.employee_id ||
+                `ID for ${teacher.id.substring(0, 5)}...`
+              }
             />
             <InfoRow
               icon={Mail}
@@ -444,6 +493,44 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#212121',
     marginBottom: 15,
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: '#999',
+    marginTop: 20,
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
+  ongoingWrapper: {
+    marginBottom: 10,
+  },
+  subjectCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    elevation: 2,
+    borderLeftWidth: 4,
+    borderLeftColor: '#2196F3', // Highlights it's a "create" action
+  },
+  subjectIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E3F2FD',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  subjectName: {fontSize: 16, fontWeight: 'bold', color: '#333'},
+  subjectMeta: {fontSize: 12, color: '#757575', marginTop: 2},
+  emptyText: {
+    textAlign: 'center',
+    color: '#999',
+    marginVertical: 20,
+    fontSize: 13,
   },
   card: {
     backgroundColor: '#FFF',

@@ -10,6 +10,8 @@ import {
   Switch,
   Alert,
   ActivityIndicator,
+  PermissionsAndroid, // 👈 ADD THIS
+  Platform,
 } from 'react-native';
 import { ArrowLeft, Calendar, MapPin, BookOpen } from 'lucide-react-native';
 import { supabase } from './lib/supabase';
@@ -61,6 +63,42 @@ export default function AddNewClass({ onBack, onClassCreated }: any) {
   }
 
   setLoading(true);
+  let isPermissionGranted = false;
+  try {
+    if (Platform.OS === 'android') {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        {
+          title: 'Adsum Geofence Access',
+          message: 'Adsum needs access to your GPS location to verify you are starting the session from the correct classroom. This prevents proxy attendance.',
+          buttonNeutral: 'Ask Me Later',
+          buttonNegative: 'Cancel',
+          buttonPositive: 'OK',
+        }
+      );
+
+      if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+        isPermissionGranted = true;
+      } else if (granted === PermissionsAndroid.RESULTS.DENIED) {
+      } else if (granted === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+        Alert.alert(
+          'Permission Required',
+          'You have denied location access permanently. Please go to your phone settings and enable Location permissions manually for Adsum.',
+        );
+      }
+    } else {
+      // Handle iOS if needed later 
+      isPermissionGranted = true; 
+    }
+  } catch (err) {
+    console.warn(err);
+  }
+
+  // Stop if permission was not granted
+  if (!isPermissionGranted) {
+    setLoading(false);
+    return; // 🛑 Halt flow
+  }
 
   // 1. Get current GPS coordinates first
   Geolocation.getCurrentPosition(

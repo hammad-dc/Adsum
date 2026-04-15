@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { Session } from '@supabase/supabase-js';
-import { supabase } from './src/lib/supabase';
+import React, {useEffect, useState} from 'react';
+import {View, ActivityIndicator, StyleSheet} from 'react-native';
+import {Session} from '@supabase/supabase-js';
+import {supabase} from './src/lib/supabase';
 
 import Auth from './src/Auth';
 import StudentDashboard from './src/StudentDashboard';
@@ -22,12 +22,12 @@ export default function App() {
   const [selectedData, setSelectedData] = useState<any>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({data: {session}}) => {
       checkUserRole(session);
     });
 
     const {
-      data: { subscription },
+      data: {subscription},
     } = supabase.auth.onAuthStateChange((_event, session) => {
       checkUserRole(session);
     });
@@ -45,14 +45,21 @@ export default function App() {
     }
 
     try {
-      const { data, error } = await supabase
+      const {data, error} = await supabase
         .from('profiles')
         .select('role')
         .eq('id', session.user.id)
         .single();
 
-      if (data) setUserRole(data.role);
-      else setUserRole('student'); // Default fallback
+      if (data) {
+
+        setUserRole(data.role);
+      } else {
+       
+        setUserRole('student');
+      }
+      // if (data) setUserRole(data.role);
+      // else setUserRole('student'); // Default fallback
 
       setSession(session);
     } catch (e) {
@@ -93,17 +100,18 @@ export default function App() {
 
     return (
       <TeacherDashboard
-      teacher={{
-        id: session.user.id, // ✅ CRITICAL: Add this line!
-        name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
-        email: session.user.email,
-      }}
-      onNavigate={setCurrentScreen}
-      onSelectClass={(data: any) => {
-        setSelectedData(data);
-        setCurrentScreen('start-session');
-      }}
-    />
+        teacher={{
+          id: session.user.id, // ✅ CRITICAL: Add this line!
+          name:
+            session.user.user_metadata?.name || "Faculty Member",
+          email: session.user.email,
+        }}
+        onNavigate={setCurrentScreen}
+        onSelectClass={(data: any) => {
+          setSelectedData(data);
+          setCurrentScreen('start-session');
+        }}
+      />
     );
   }
 
@@ -133,5 +141,5 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  container: {flex: 1, justifyContent: 'center', alignItems: 'center'},
 });

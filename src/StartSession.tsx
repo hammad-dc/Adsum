@@ -9,6 +9,7 @@ import {
   ScrollView,
   BackHandler,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import {requestBluetoothPermissions} from './lib/ble';
 import {
@@ -52,6 +53,9 @@ export default function StartSession({classSession, onBack}: any) {
   const [attendeeCount, setAttendeeCount] = useState(0);
   const [totalStudents, setTotalStudents] = useState(0);
   const [showManual, setShowManual] = useState(false);
+
+  const [showBatchPicker, setShowBatchPicker] = useState(false);
+  const [selectedBatch, setSelectedBatch] = useState('ALL');
 
   // --- 1. Main Initialization Effect (Runs Once) ---
   useEffect(() => {
@@ -235,6 +239,17 @@ export default function StartSession({classSession, onBack}: any) {
   };
 
   const handleStartClass = () => {
+    // 1. If it's a Lab, we MUST pick a batch first
+    if (classSession?.type === 'Lab' || classSession?.subject_type === 'Lab') {
+      setShowBatchPicker(true);
+    } else {
+      // 2. If it's Theory, default to ALL and proceed with hardware check
+      setSelectedBatch('ALL');
+      triggerHardwareCheck();
+    }
+  };
+
+  const triggerHardwareCheck = () => {
     if (!beaconActive) {
       Alert.alert(
         '⚠️ Security Warning',
@@ -269,6 +284,7 @@ export default function StartSession({classSession, onBack}: any) {
       .update({
         is_hardware_required: hardwareRequired,
         is_active: true,
+        target_batch: selectedBatch,
       })
       .eq('id', classSession.id);
   };
@@ -373,7 +389,6 @@ export default function StartSession({classSession, onBack}: any) {
           {className}
         </Text>
       </View>
-
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* ---------------- LOCATION SECURITY MODE ---------------- */}
         <View style={styles.card}>
@@ -603,7 +618,48 @@ export default function StartSession({classSession, onBack}: any) {
 
         <View style={{height: 50}} />
       </ScrollView>
+      // Inside your return (...), add this Modal component
+      <Modal visible={showBatchPicker} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.batchCard}>
+            <Text style={styles.batchTitle}>Select Practical Batch</Text>
+            <Text style={styles.batchSub}>
+              Only students in this batch will see the session.
+            </Text>
 
+            <View style={styles.batchRow}>
+              {['A', 'B', 'C'].map(b => (
+                <TouchableOpacity
+                  key={b}
+                  style={[
+                    styles.batchBtn,
+                    selectedBatch === b && styles.batchBtnActive,
+                  ]}
+                  onPress={() => setSelectedBatch(b)}>
+                  <Text
+                    style={[
+                      styles.batchBtnText,
+                      selectedBatch === b && styles.batchBtnTextActive,
+                    ]}>
+                    Batch {b}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity
+              style={styles.confirmBtn}
+              onPress={() => {
+                setShowBatchPicker(false);
+                triggerHardwareCheck();
+              }}>
+              <Text style={styles.confirmBtnText}>
+                Start Session for Batch {selectedBatch}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       <ManualOverride
         visible={showManual}
         onClose={() => setShowManual(false)}
@@ -815,4 +871,39 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginTop: 2,
   },
+
+  // --- BATCH PICKER MODAL ---
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  batchCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+  },
+  batchTitle: {fontSize: 20, fontWeight: 'bold', color: '#333'},
+  batchSub: {fontSize: 13, color: '#757575', marginTop: 4, textAlign: 'center'},
+  batchRow: {flexDirection: 'row', gap: 12, marginVertical: 25},
+  batchBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  batchBtnActive: {backgroundColor: '#2196F3', borderColor: '#2196F3'},
+  batchBtnText: {fontWeight: '600', color: '#757575'},
+  batchBtnTextActive: {color: '#FFF'},
+  confirmBtn: {
+    backgroundColor: '#2196F3',
+    width: '100%',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  confirmBtnText: {color: '#FFF', fontWeight: 'bold', fontSize: 16},
 });

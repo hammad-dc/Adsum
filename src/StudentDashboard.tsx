@@ -52,40 +52,102 @@ export default function StudentDashboard({session, onNavigate}: any) {
   const [heatmapData, setHeatmapData] = useState<
     {date: string; count: number}[]
   >([]);
+  const [stats, setStats] = useState({attended: 0, total: 0});
+  // 1. NEW: Fetch holidays from Supabase
+
+  const [holidays, setHolidays] = useState<string[]>([]); // 👈 Array of date strings
+  const [attendanceData, setAttendanceData] = useState<any[]>([]);
+
+  useEffect(() => {
+    loadHolidays();
+  }, []);
+
+  const loadHolidays = async () => {
+    try {
+      const {data, error} = await supabase
+        .from('holidays')
+        .select('holiday_date');
+
+      if (error) throw error;
+
+      if (data) {
+        // Transform: [{holiday_date: '2026-04-14'}] -> ['2026-04-14']
+        const formattedHolidays = data.map(item => item.holiday_date);
+        setHolidays(formattedHolidays);
+      }
+    } catch (err) {
+      console.error('Error fetching holidays:', err);
+    }
+  };
+
+  const fetchPerformanceStats = async () => {
+    try {
+      const {data, error} = await supabase.rpc('get_student_stats', {
+        p_student_id: session.user.id,
+      });
+
+      if (error) throw error;
+
+      if (data && data[0]) {
+        setStats({
+          attended: parseInt(data[0].attended_count),
+          total: parseInt(data[0].total_possible_count),
+        });
+      }
+    } catch (err) {
+      console.error('Stats Fetch Error:', err);
+    }
+  };
 
   // 2. Fetch the actual attendance from Supabase
   useEffect(() => {
     const loadData = async () => {
-      const {data, error} = await supabase
+      // 1. Get classes the student actually attended
+      const {data: attendanceData} = await supabase
         .from('attendance')
-        .select('created_at')
+        .select('marked_at')
         .eq('student_id', session.user.id);
 
-      if (data) {
-        const counts = data.reduce((acc: Record<string, number>, curr: any) => {
-          const date = curr.created_at.split('T')[0];
-          acc[date] = (acc[date] || 0) + 1;
-          return acc;
-        }, {});
+      // 2. Get sessions actually HELD for this student's cohort
+      const {data: sessionsData} = await supabase
+        .from('sessions')
+        .select('created_at')
+        .eq('target_course', profile.course)
+        .eq('target_year', profile.year)
+        .eq('target_semester', profile.semester)
+        .eq('is_active', false) 
+        .or(`target_batch.eq.ALL,target_batch.eq.${profile.batch}`);
 
-        setHeatmapData(
-          Object.keys(counts).map(d => ({
-            date: d,
-            count: counts[d],
-          })),
-        );
-      }
+      const finalMap: any = {};
+
+      // 🎯 STEP A: Map Sessions Held (The Denominator)
+      // We do this first so dates appear even if the student attended 0 classes
+      sessionsData?.forEach(s => {
+        const date = s.created_at.split('T')[0];
+        if (!finalMap[date]) finalMap[date] = {attended: 0, held: 0};
+        finalMap[date].held += 1;
+      });
+
+      // 🎯 STEP B: Map Attendance (The Numerator)
+      attendanceData?.forEach(a => {
+        const date = a.marked_at.split('T')[0];
+        if (!finalMap[date]) finalMap[date] = {attended: 0, held: 0};
+        finalMap[date].attended += 1;
+      });
+
+      // 🎯 STEP C: Convert the combined map into the Heatmap array
+      const formattedData = Object.keys(finalMap).map(date => ({
+        date: date,
+        count: finalMap[date].attended, // Numerator
+        total: finalMap[date].held, // Denominator
+      }));
+
+      setHeatmapData(formattedData);
     };
-    loadData();
-  }, [session.user.id]);
 
-  // 3. Calculate stats for the "Flip" side of the card
-  const totalAttended = heatmapData.length;
-  const TOTAL_LECTURES_SCHEDULED = 69; // We should make this dynamic later!
-  const attendancePercentage =
-    TOTAL_LECTURES_SCHEDULED > 0
-      ? Math.round((totalAttended / TOTAL_LECTURES_SCHEDULED) * 100)
-      : 0;
+    if (profile) loadData();
+  }, [session.user.id, profile]); // 👈 Added profile to dependencies to ensure filters match
+
   useEffect(() => {
     const getProfile = async () => {
       setProfileLoading(true);
@@ -135,8 +197,14 @@ export default function StudentDashboard({session, onNavigate}: any) {
   };
 
   useEffect(() => {
-    if (profile) fetchLiveClasses();
+    if (profile) {
+      fetchLiveClasses();
+      fetchPerformanceStats();
+    }
   }, [profile]);
+
+  const attendancePercentage =
+    stats.total > 0 ? Math.round((stats.attended / stats.total) * 100) : 0;
 
   // --- CONSISTENT LOGOUT LOGIC ---
   const handleLogout = async () => {
@@ -188,10 +256,11 @@ export default function StudentDashboard({session, onNavigate}: any) {
             </View>
           </View>
           <AttendanceGrid
+            holidays={holidays}
             heatmapData={heatmapData}
             attendancePercentage={attendancePercentage}
-            totalAttended={totalAttended}
-            totalLectures={TOTAL_LECTURES_SCHEDULED}
+            totalAttended={stats.attended}
+            totalLectures={stats.total}
           />
 
           {/* List Section */}

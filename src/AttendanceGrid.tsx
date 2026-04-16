@@ -9,6 +9,7 @@ import {
 
 export default function AttendanceGrid({
   heatmapData,
+  holidays,
   attendancePercentage,
   totalAttended,
   totalLectures,
@@ -80,28 +81,76 @@ export default function AttendanceGrid({
 
               {Array.from({length: daysInMonth}).map((_, index) => {
                 const day = index + 1;
-                const dateStr = new Date(currentYear, currentMonth, day)
-                  .toISOString()
-                  .split('T')[0];
-                const hasAttendance = heatmapData?.some(
-                  (d: any) => d.date === dateStr && d.count > 0,
+                const yearStr = currentYear;
+                const monthStr = String(currentMonth + 1).padStart(2, '0');
+                const dayStr = String(day).padStart(2, '0');
+                const dateStr = `${yearStr}-${monthStr}-${dayStr}`;
+
+                const date = new Date(currentYear, currentMonth, day);
+                const isHoliday = holidays?.includes(dateStr);
+                const isSunday = date.getDay() === 0;
+
+                // 1. Find Data for this day
+                const dayData = heatmapData?.find(
+                  (d: any) => d.date === dateStr,
                 );
+                const attendedCount = dayData?.count || 0;
+                const totalForDay = dayData?.total || 0; // Standard daily count
+
+                // 2. Color Scaling Logic
+                const densityColors = [
+                  '#F9F9F9',
+                  '#BBDEFB',
+                  '#64B5F6',
+                  '#2196F3',
+                  '#1565C0',
+                ];
+                const colorIndex = Math.min(attendedCount, 4);
+
+                // 3. Style Selection Priority
+                let backgroundColor = densityColors[0]; // Default Empty
+                let textColor = '#757575'; // Default Gray text
+
+                if (attendedCount > 0) {
+                  backgroundColor = densityColors[colorIndex];
+                  textColor = attendedCount > 2 ? '#FFF' : '#2196F3'; // Contrast logic
+                } else if (isHoliday || isSunday) {
+                  backgroundColor = '#EEEEEE'; // 🎯 Distinct Gray for Holidays/Sundays
+                  textColor = '#BDBDBD';
+                }
 
                 return (
                   <View
                     key={day}
                     style={[
                       styles.calendarCell,
-                      {width: squareSize, height: squareSize},
-                      hasAttendance ? styles.attendedCell : styles.absentCell,
+                      {
+                        width: squareSize,
+                        height: squareSize,
+                        backgroundColor: backgroundColor,
+                        position: 'relative',
+                      },
                     ]}>
-                    <Text
-                      style={[
-                        styles.dayNumber,
-                        hasAttendance && styles.dayNumberAttended,
-                      ]}>
+                    {/* Day Number */}
+                    <Text style={[styles.dayNumber, {color: textColor}]}>
                       {day}
                     </Text>
+
+                    {/* 4. The Quantitative Indicator ("1/5") */}
+                    {attendedCount > 0 && (
+                      <Text
+                        style={[
+                          styles.densityText,
+                          {
+                            color:
+                              attendedCount > 2
+                                ? 'rgba(255,255,255,0.8)'
+                                : '#2196F3',
+                          },
+                        ]}>
+                        {attendedCount}/{totalForDay}
+                      </Text>
+                    )}
                   </View>
                 );
               })}
@@ -168,6 +217,21 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'flex-start',
   },
+  dayNumber: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#757575',
+  },
+  densityText: {
+    fontSize: 7, // Keep it very small
+    fontWeight: 'bold',
+    position: 'absolute',
+    bottom: 2,
+  },
+  // Ensure your holiday style matches your new gray
+  holidayCell: {
+    backgroundColor: '#F1F1F1',
+  },
   calendarCell: {
     borderRadius: 8,
     justifyContent: 'center',
@@ -178,8 +242,15 @@ const styles = StyleSheet.create({
   },
   absentCell: {backgroundColor: '#FAFAFA'},
   attendedCell: {backgroundColor: '#4CAF50', borderColor: '#4CAF50'},
-  dayNumber: {fontSize: 10, color: '#999', fontWeight: 'bold'},
+  
   dayNumberAttended: {color: '#FFF'},
+  
+  dayNumberHoliday: {
+    color: '#BDBDBD',
+    fontSize: 10,
+    fontWeight: '400',
+  },
+
   statsView: {height: 160, justifyContent: 'center', alignItems: 'center'},
   statRow: {
     flexDirection: 'row',

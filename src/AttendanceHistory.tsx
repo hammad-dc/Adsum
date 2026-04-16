@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, {useState, useEffect} from 'react';
 import {
   View,
   Text,
@@ -7,55 +7,57 @@ import {
   FlatList,
   ActivityIndicator,
 } from 'react-native';
-import { ArrowLeft, Calendar, Filter } from 'lucide-react-native';
-import { supabase } from './lib/supabase';
+import {ArrowLeft, Calendar, Filter} from 'lucide-react-native';
+import {supabase} from './lib/supabase';
 
-export default function AttendanceHistory({ onBack }: any) {
+export default function AttendanceHistory({onBack}: any) {
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'All' | 'Present' | 'Absent'>('All');
+  const [stats, setStats] = useState({attended: 0, total: 0});
 
   // --- 1. Fetch Real History from Supabase ---
-  const fetchHistory = async () => {
+  const fetchHistoryAndStats = async () => {
     try {
-      // Get the logged-in user
       const {
-        data: { user },
+        data: {user},
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Fetch attendance + class details (name, room)
-      const { data, error } = await supabase
+      // 1. Fetch History List
+      const {data: histData} = await supabase
         .from('attendance')
-        .select(
-          `
-          *,
-          sessions ( class_name, room_number, created_at )
-        `,
-        )
+        .select('*, sessions(class_name, room_number, created_at)')
         .eq('student_id', user.id)
-        .order('marked_at', { ascending: false });
+        .order('marked_at', {ascending: false});
 
-      if (error) throw error;
-      setHistory(data || []);
-    } catch (err) {
-      console.error('Error fetching history:', err);
+      // 2. Fetch Real Stats (Dynamic Denominator)
+      const {data: statsData} = await supabase.rpc('get_student_stats', {
+        p_student_id: user.id, // 🎯 Matches our new RPC parameter
+      });
+
+      setHistory(histData || []);
+      if (statsData?.[0]) {
+        setStats({
+          attended: parseInt(statsData[0].attended_count),
+          total: parseInt(statsData[0].total_possible_count),
+        });
+      }
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchHistory();
+    fetchHistoryAndStats();
   }, []);
 
   // --- 2. Calculate Real Stats ---
-  const total = history.length;
-  const present = history.filter(r => r.status === 'present').length;
-  // Note: 'Absent' logic is tricky without a schedule table, so for now absent = total - present (which is 0 for this view)
-  // In a full app, you'd compare 'total classes held' vs 'your attendance'.
-  const absent = 0;
-  const percentage = total > 0 ? Math.round((present / total) * 100) : 100;
+  const totalHeld = stats.total;
+  const presentCount = stats.attended;
+  const absentCount = totalHeld - presentCount;
+  const percentage =
+    totalHeld > 0 ? Math.round((presentCount / totalHeld) * 100) : 100;
 
   // --- 3. Filter List ---
   const displayedList =
@@ -63,7 +65,7 @@ export default function AttendanceHistory({ onBack }: any) {
       ? history
       : history.filter(r => r.status.toLowerCase() === filter.toLowerCase());
 
-  const renderItem = ({ item }: any) => {
+  const renderItem = ({item}: any) => {
     // Robust Date Formatting
     const rawDate = item.marked_at || item.created_at;
     const dateObj = new Date(rawDate);
@@ -76,12 +78,15 @@ export default function AttendanceHistory({ onBack }: any) {
     // Get Class Name from the joined 'sessions' table
     // If it was an ad-hoc class without a name, fallback to "Unknown"
     const className = item.sessions?.class_name || 'Unknown Class';
+    const status = item.status === 'present';
 
     return (
       <View style={styles.card}>
         <View style={styles.rowBetween}>
-          <View>
-            <Text style={styles.subject}>{className}</Text>
+          <View style={{flex: 1}}>
+            <Text style={styles.subject} numberOfLines={1}>
+              {className}
+            </Text>
             <View style={styles.row}>
               <Calendar size={14} color="#757575" />
               <Text style={styles.date}>
@@ -90,20 +95,15 @@ export default function AttendanceHistory({ onBack }: any) {
             </View>
           </View>
 
-          {/* Status Badge */}
+          {/* 🟢/🔴 Dynamic Pill */}
           <View
-            style={[
-              styles.pill,
-              item.status === 'present' ? styles.pillGreen : styles.pillRed,
-            ]}
-          >
+            style={[styles.pill, status ? styles.pillGreen : styles.pillRed]}>
             <Text
               style={[
                 styles.pillText,
-                item.status === 'present' ? styles.textGreen : styles.textRed,
-              ]}
-            >
-              {item.status === 'present' ? 'Present' : 'Absent'}
+                status ? styles.textGreen : styles.textRed,
+              ]}>
+              {status ? 'Present' : 'Absent'}
             </Text>
           </View>
         </View>
@@ -120,8 +120,7 @@ export default function AttendanceHistory({ onBack }: any) {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Attendance History</Text>
         <TouchableOpacity
-          onPress={() => setFilter(filter === 'All' ? 'Present' : 'All')}
-        >
+          onPress={() => setFilter(filter === 'All' ? 'Present' : 'All')}>
           <Filter color="#FFF" size={24} />
         </TouchableOpacity>
       </View>
@@ -130,21 +129,19 @@ export default function AttendanceHistory({ onBack }: any) {
       <View style={styles.statsContainer}>
         <View style={styles.statBox}>
           <Text style={styles.statLabel}>Total</Text>
-          <Text style={styles.statValue}>{total}</Text>
+          <Text style={styles.statValue}>{totalHeld}</Text>
         </View>
         <View style={styles.statBox}>
           <Text style={styles.statLabel}>Present</Text>
-          <Text style={[styles.statValue, { color: '#4CAF50' }]}>
-            {present}
-          </Text>
+          <Text style={[styles.statValue, {color: '#4CAF50'}]}>{presentCount}</Text>
         </View>
         <View style={styles.statBox}>
           <Text style={styles.statLabel}>Absent</Text>
-          <Text style={[styles.statValue, { color: '#F44336' }]}>{absent}</Text>
+          <Text style={[styles.statValue, {color: '#F44336'}]}>{absentCount}</Text>
         </View>
         <View style={styles.statBox}>
           <Text style={styles.statLabel}>%</Text>
-          <Text style={[styles.statValue, { color: '#2196F3' }]}>
+          <Text style={[styles.statValue, {color: '#2196F3'}]}>
             {percentage}%
           </Text>
         </View>
@@ -153,17 +150,15 @@ export default function AttendanceHistory({ onBack }: any) {
       {/* List */}
       <View style={styles.content}>
         {loading ? (
-          <ActivityIndicator color="#2196F3" style={{ marginTop: 20 }} />
+          <ActivityIndicator color="#2196F3" style={{marginTop: 20}} />
         ) : (
           <FlatList
             data={displayedList}
             renderItem={renderItem}
             keyExtractor={item => item.id.toString()}
-            contentContainerStyle={{ paddingBottom: 20 }}
+            contentContainerStyle={{paddingBottom: 20}}
             ListEmptyComponent={
-              <Text
-                style={{ textAlign: 'center', color: '#999', marginTop: 50 }}
-              >
+              <Text style={{textAlign: 'center', color: '#999', marginTop: 50}}>
                 No attendance records found yet.
               </Text>
             }
@@ -175,7 +170,7 @@ export default function AttendanceHistory({ onBack }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: {flex: 1, backgroundColor: '#F5F5F5'},
   header: {
     backgroundColor: '#2196F3',
     padding: 20,
@@ -183,9 +178,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  headerTitle: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
+  headerTitle: {color: '#FFF', fontSize: 20, fontWeight: 'bold'},
 
-  statsContainer: { flexDirection: 'row', padding: 15, gap: 10 },
+  statsContainer: {flexDirection: 'row', padding: 15, gap: 10},
   statBox: {
     flex: 1,
     backgroundColor: '#FFF',
@@ -194,10 +189,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     elevation: 2,
   },
-  statLabel: { color: '#757575', fontSize: 12, marginBottom: 5 },
-  statValue: { fontSize: 20, fontWeight: 'bold', color: '#333' },
+  statLabel: {color: '#757575', fontSize: 12, marginBottom: 5},
+  statValue: {fontSize: 20, fontWeight: 'bold', color: '#333'},
 
-  content: { flex: 1, paddingHorizontal: 15 },
+  content: {flex: 1, paddingHorizontal: 15},
   card: {
     backgroundColor: '#FFF',
     padding: 15,
@@ -210,14 +205,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 },
-  subject: { fontSize: 16, fontWeight: 'bold', color: '#212121' },
-  date: { fontSize: 14, color: '#757575' },
+  row: {flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4},
+  subject: {fontSize: 16, fontWeight: 'bold', color: '#212121'},
+  date: {fontSize: 14, color: '#757575'},
 
-  pill: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
-  pillGreen: { backgroundColor: '#E8F5E9' },
-  pillRed: { backgroundColor: '#FFEBEE' },
-  pillText: { fontSize: 12, fontWeight: 'bold' },
-  textGreen: { color: '#4CAF50' },
-  textRed: { color: '#F44336' },
+  pill: {paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20},
+  pillGreen: {backgroundColor: '#E8F5E9'},
+  pillRed: {backgroundColor: '#FFEBEE'},
+  pillText: {fontSize: 12, fontWeight: 'bold'},
+  textGreen: {color: '#4CAF50'},
+  textRed: {color: '#F44336'},
 });

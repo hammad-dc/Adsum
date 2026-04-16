@@ -276,7 +276,7 @@ export default function TeacherDashboard({
 
               {/* ✅ Convert FlatList to .map() to fix the scrolling bug */}
               <View style={styles.assignedWrapper}>
-                {assignedSubjects.map(item => (
+                {assignedSubjects?.map(item => (
                   <TouchableOpacity
                     key={`assigned-${item.id}`}
                     style={styles.subjectCard}
@@ -504,6 +504,13 @@ const styles = StyleSheet.create({
   ongoingWrapper: {
     marginBottom: 10,
   },
+  assignedWrapper: {
+    marginTop: 10,
+    paddingVertical: 5,
+    flexDirection: 'row', // Align chips horizontally
+    flexWrap: 'wrap', // Allow them to move to the next line
+    gap: 10, // Space between chips
+  },
   subjectCard: {
     backgroundColor: '#FFF',
     borderRadius: 12,
@@ -526,12 +533,6 @@ const styles = StyleSheet.create({
   },
   subjectName: {fontSize: 16, fontWeight: 'bold', color: '#333'},
   subjectMeta: {fontSize: 12, color: '#757575', marginTop: 2},
-  emptyText: {
-    textAlign: 'center',
-    color: '#999',
-    marginVertical: 20,
-    fontSize: 13,
-  },
   card: {
     backgroundColor: '#FFF',
     borderRadius: 12,

@@ -587,13 +587,9 @@ export default function StartSession({classSession, onBack}: any) {
 
         {/* ---------------- FOOTER (Spread Out) ---------------- */}
         <View style={{marginTop: 10}}>
-          <TouchableOpacity
-            style={styles.footerButton}
-            onPress={() => setShowManual(true)}>
-            <Eye size={24} color="#555" style={{marginRight: 8}} />
-            <Text style={styles.footerText}>
-              Class List / Manual Attendance
-            </Text>
+          <TouchableOpacity style={styles.footerButton}>
+            <Eye size={24} color="#555" />
+            <Text style={styles.footerText}>Class List</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -617,8 +613,7 @@ export default function StartSession({classSession, onBack}: any) {
         </View>
 
         <View style={{height: 50}} />
-      </ScrollView>
-      // Inside your return (...), add this Modal component
+      </ScrollView> 
       <Modal visible={showBatchPicker} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.batchCard}>

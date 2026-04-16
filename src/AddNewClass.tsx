@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, {useState, useEffect} from 'react';
 import Geolocation from 'react-native-geolocation-service';
 import {
   View,
@@ -13,19 +13,19 @@ import {
   PermissionsAndroid, // 👈 ADD THIS
   Platform,
 } from 'react-native';
-import { ArrowLeft, Calendar, MapPin, BookOpen } from 'lucide-react-native';
-import { supabase } from './lib/supabase';
+import {ArrowLeft, Calendar, MapPin, BookOpen} from 'lucide-react-native';
+import {supabase} from './lib/supabase';
 
-export default function AddNewClass({ onBack, onClassCreated }: any) {
+export default function AddNewClass({onBack, onClassCreated}: any) {
   const [isAdHoc, setIsAdHoc] = useState(true);
   const [loading, setLoading] = useState(false);
 
   // ✅ FIX: Pre-filled with defaults so chips appear INSTANTLY
   const [savedSubjects, setSavedSubjects] = useState<any[]>([
-    { id: 991, name: 'DSGT', code: 'CS301' },
-    { id: 992, name: 'DLCA', code: 'CS302' },
-    { id: 993, name: 'Data Structures', code: 'CS303' },
-    { id: 994, name: 'Computer Graphics', code: 'CS304' },
+    {id: 991, name: 'DSGT', code: 'CS301'},
+    {id: 992, name: 'DLCA', code: 'CS302'},
+    {id: 993, name: 'Data Structures', code: 'CS303'},
+    {id: 994, name: 'Computer Graphics', code: 'CS304'},
   ]);
 
   const [subjectName, setSubjectName] = useState('');
@@ -33,13 +33,17 @@ export default function AddNewClass({ onBack, onClassCreated }: any) {
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(
     null,
   );
+  const [targetCourse, setTargetCourse] = useState('Computer Engineering');
+  const [targetYear, setTargetYear] = useState('SE'); // FE, SE, TE, BE
+  const [targetSemester, setTargetSemester] = useState(4);
+  const [selectedBatch, setSelectedBatch] = useState('ALL'); // ALL, A, B, or C
 
   useEffect(() => {
     fetchSubjects();
   }, []);
 
   const fetchSubjects = async () => {
-    const { data, error } = await supabase.from('subjects').select('*');
+    const {data, error} = await supabase.from('subjects').select('*');
     if (!error && data && data.length > 0) {
       // Combine defaults with real DB data
       setSavedSubjects(prev => [...prev, ...data]);
@@ -48,105 +52,134 @@ export default function AddNewClass({ onBack, onClassCreated }: any) {
 
   const selectSubject = (subject: any) => {
     setSubjectName(subject.name);
-    // Auto-fill room if logic allows, or keep empty
-    if (subject.name === 'DSGT') setRoom('Room 304');
-    else if (subject.name === 'DLCA') setRoom('Lab 1');
-    else setRoom('');
-
     setSelectedSubjectId(subject.id);
+
+    if (subject.target_course) setTargetCourse(subject.target_course);
+    if (subject.target_year) setTargetYear(subject.target_year);
+    if (subject.target_semester) setTargetSemester(subject.target_semester);
+
+    if (subject.name.toLowerCase().includes('lab')) {
+      setRoom('Lab 1');
+      setSelectedBatch('A'); // Default to Batch A for labs
+    } else {
+      setRoom('Room 304');
+      setSelectedBatch('ALL');
+    }
   };
 
   const handleSubmit = async () => {
-  if (!subjectName || !room) {
-    Alert.alert('Missing Fields', 'Please select a subject or type a name and room.');
-    return;
-  }
-
-  setLoading(true);
-  let isPermissionGranted = false;
-  try {
-    if (Platform.OS === 'android') {
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-        {
-          title: 'Adsum Geofence Access',
-          message: 'Adsum needs access to your GPS location to verify you are starting the session from the correct classroom. This prevents proxy attendance.',
-          buttonNeutral: 'Ask Me Later',
-          buttonNegative: 'Cancel',
-          buttonPositive: 'OK',
-        }
+    if (!subjectName || !room) {
+      Alert.alert(
+        'Missing Fields',
+        'Please select a subject or type a name and room.',
       );
-
-      if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-        isPermissionGranted = true;
-      } else if (granted === PermissionsAndroid.RESULTS.DENIED) {
-      } else if (granted === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
-        Alert.alert(
-          'Permission Required',
-          'You have denied location access permanently. Please go to your phone settings and enable Location permissions manually for Adsum.',
-        );
-      }
-    } else {
-      // Handle iOS if needed later 
-      isPermissionGranted = true; 
+      return;
     }
-  } catch (err) {
-    console.warn(err);
-  }
 
-  // Stop if permission was not granted
-  if (!isPermissionGranted) {
-    setLoading(false);
-    return; // 🛑 Halt flow
-  }
+    setLoading(true);
+    let isPermissionGranted = false;
+    try {
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: 'Adsum Geofence Access',
+            message:
+              'Adsum needs access to your GPS location to verify you are starting the session from the correct classroom. This prevents proxy attendance.',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          },
+        );
 
-  // 1. Get current GPS coordinates first
-  Geolocation.getCurrentPosition(
-    async (position) => {
-      const { latitude, longitude } = position.coords;
-      
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        const newBeaconId = `BEACON-${Math.floor(Math.random() * 10000)}`;
-        const initialCode = Math.floor(1000 + Math.random() * 9000).toString();
-
-        // 2. Insert into Supabase WITH the coordinates
-        const { data, error } = await supabase
-          .from('sessions')
-          .insert({
-            beacon_id: newBeaconId,
-            active_code: initialCode,
-            is_active: true,
-            class_name: subjectName,
-            room_number: room,
-            teacher_id: user?.id,
-            gps_lat: latitude,   // ✅ Added
-            gps_long: longitude, // ✅ Added
-            subject_id: selectedSubjectId && selectedSubjectId < 900 ? selectedSubjectId : null,
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
-
-        if (onClassCreated) {
-          onClassCreated({ ...data, class_name: subjectName, room_number: room });
+        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+          isPermissionGranted = true;
+        } else if (granted === PermissionsAndroid.RESULTS.DENIED) {
+        } else if (granted === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+          Alert.alert(
+            'Permission Required',
+            'You have denied location access permanently. Please go to your phone settings and enable Location permissions manually for Adsum.',
+          );
         }
-        onBack();
-      } catch (err: any) {
-        Alert.alert('Database Error', err.message);
-      } finally {
-        setLoading(false);
+      } else {
+        // Handle iOS if needed later
+        isPermissionGranted = true;
       }
-    },
-    (error) => {
+    } catch (err) {
+      console.warn(err);
+    }
+
+    // Stop if permission was not granted
+    if (!isPermissionGranted) {
       setLoading(false);
-      Alert.alert('GPS Error', 'Could not get your location. Please check if GPS is on.');
-      console.error(error);
-    },
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-  );
-};
+      return; // 🛑 Halt flow
+    }
+
+    // 1. Get current GPS coordinates first
+    Geolocation.getCurrentPosition(
+      async position => {
+        const {latitude, longitude} = position.coords;
+
+        try {
+          const {
+            data: {user},
+          } = await supabase.auth.getUser();
+          const newBeaconId = `BEACON-${Math.floor(Math.random() * 10000)}`;
+          const initialCode = Math.floor(
+            1000 + Math.random() * 9000,
+          ).toString();
+
+          // 2. Insert into Supabase WITH the coordinates
+          const {data, error} = await supabase
+            .from('sessions')
+            .insert({
+              class_name: subjectName,
+              room_number: room,
+              teacher_id: user?.id,
+              subject_id:
+                selectedSubjectId && selectedSubjectId < 900
+                  ? selectedSubjectId
+                  : null,
+              target_course: targetCourse,
+              target_year: targetYear,
+              target_semester: targetSemester,
+              target_batch: selectedBatch,
+              beacon_id: newBeaconId,
+              active_code: initialCode,
+              is_active: true,
+              gps_lat: latitude, // ✅ Added
+              gps_long: longitude, // ✅ Added
+            })
+            .select()
+            .single();
+
+          if (error) throw error;
+
+          if (onClassCreated) {
+            onClassCreated({
+              ...data,
+              class_name: subjectName,
+              room_number: room,
+            });
+          }
+          onBack();
+        } catch (err: any) {
+          Alert.alert('Database Error', err.message);
+        } finally {
+          setLoading(false);
+        }
+      },
+      error => {
+        setLoading(false);
+        Alert.alert(
+          'GPS Error',
+          'Could not get your location. Please check if GPS is on.',
+        );
+        console.error(error);
+      },
+      {enableHighAccuracy: true, timeout: 15000, maximumAge: 10000},
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -167,7 +200,7 @@ export default function AddNewClass({ onBack, onClassCreated }: any) {
             <Switch
               value={isAdHoc}
               onValueChange={setIsAdHoc}
-              trackColor={{ false: '#E0E0E0', true: '#90CAF9' }}
+              trackColor={{false: '#E0E0E0', true: '#90CAF9'}}
               thumbColor={isAdHoc ? '#2196F3' : '#f4f3f4'}
             />
           </View>
@@ -179,8 +212,7 @@ export default function AddNewClass({ onBack, onClassCreated }: any) {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            style={styles.chipScroll}
-          >
+            style={styles.chipScroll}>
             {savedSubjects.map((sub, index) => (
               <TouchableOpacity
                 key={`${sub.id}-${index}`}
@@ -188,8 +220,7 @@ export default function AddNewClass({ onBack, onClassCreated }: any) {
                   styles.chip,
                   selectedSubjectId === sub.id && styles.chipActive,
                 ]}
-                onPress={() => selectSubject(sub)}
-              >
+                onPress={() => selectSubject(sub)}>
                 <BookOpen
                   size={14}
                   color={selectedSubjectId === sub.id ? '#FFF' : '#2196F3'}
@@ -198,13 +229,49 @@ export default function AddNewClass({ onBack, onClassCreated }: any) {
                   style={[
                     styles.chipText,
                     selectedSubjectId === sub.id && styles.chipTextActive,
-                  ]}
-                >
+                  ]}>
                   {sub.name}
                 </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
+        </View>
+
+        {/* --- 🎯 TARGET AUDIENCE SECTION --- */}
+        <View style={styles.card}>
+          <Text style={styles.sectionHeader}>Target Students</Text>
+
+          <View style={styles.rowBetween}>
+            <Text style={styles.label}>Batch Selection</Text>
+            <View style={styles.batchContainer}>
+              {['ALL', 'A', 'B', 'C'].map(b => (
+                <TouchableOpacity
+                  key={b}
+                  onPress={() => setSelectedBatch(b)}
+                  style={[
+                    styles.miniChip,
+                    selectedBatch === b && styles.miniChipActive,
+                  ]}>
+                  <Text
+                    style={[
+                      styles.miniChipText,
+                      selectedBatch === b && styles.miniChipTextActive,
+                    ]}>
+                    {b}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.targetInfoBox}>
+            <Text style={styles.subLabel}>
+              Pushing to:{' '}
+              <Text style={{fontWeight: 'bold', color: '#2196F3'}}>
+                {targetYear} - Sem {targetSemester} ({targetCourse})
+              </Text>
+            </Text>
+          </View>
         </View>
 
         <View style={styles.card}>
@@ -223,7 +290,7 @@ export default function AddNewClass({ onBack, onClassCreated }: any) {
           <View style={styles.inputIconContainer}>
             <MapPin size={20} color="#757575" style={styles.inputIcon} />
             <TextInput
-              style={[styles.input, { paddingLeft: 40 }]}
+              style={[styles.input, {paddingLeft: 40}]}
               placeholder="e.g. Lab 301"
               value={room}
               onChangeText={setRoom}
@@ -236,8 +303,7 @@ export default function AddNewClass({ onBack, onClassCreated }: any) {
         <TouchableOpacity
           style={styles.createButton}
           onPress={handleSubmit}
-          disabled={loading}
-        >
+          disabled={loading}>
           {loading ? (
             <ActivityIndicator color="#FFF" />
           ) : (
@@ -250,7 +316,7 @@ export default function AddNewClass({ onBack, onClassCreated }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: {flex: 1, backgroundColor: '#F5F5F5'},
   header: {
     backgroundColor: '#2196F3',
     padding: 20,
@@ -258,8 +324,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 15,
   },
-  headerTitle: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
-  content: { padding: 20 },
+  headerTitle: {color: '#FFF', fontSize: 20, fontWeight: 'bold'},
+  content: {padding: 20},
   card: {
     backgroundColor: '#FFF',
     borderRadius: 12,
@@ -272,8 +338,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  label: { fontSize: 16, fontWeight: 'bold', color: '#212121' },
-  subLabel: { fontSize: 12, color: '#757575', marginTop: 2 },
+  label: {fontSize: 16, fontWeight: 'bold', color: '#212121'},
+  subLabel: {fontSize: 12, color: '#757575', marginTop: 2},
   sectionHeader: {
     fontSize: 14,
     fontWeight: 'bold',
@@ -295,8 +361,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#212121',
   },
-  inputIconContainer: { position: 'relative', justifyContent: 'center' },
-  inputIcon: { position: 'absolute', left: 12, zIndex: 1 },
+  inputIconContainer: {position: 'relative', justifyContent: 'center'},
+  inputIcon: {position: 'absolute', left: 12, zIndex: 1},
   footer: {
     padding: 20,
     backgroundColor: '#FFF',
@@ -309,9 +375,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
   },
-  buttonText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
-  quickSelectContainer: { marginBottom: 15 },
-  chipScroll: { flexDirection: 'row' },
+  buttonText: {color: '#FFF', fontSize: 16, fontWeight: 'bold'},
+  quickSelectContainer: {marginBottom: 15},
+  chipScroll: {flexDirection: 'row'},
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -324,7 +390,37 @@ const styles = StyleSheet.create({
     borderColor: '#2196F3',
     gap: 6,
   },
-  chipActive: { backgroundColor: '#2196F3' },
-  chipText: { color: '#2196F3', fontWeight: '600' },
-  chipTextActive: { color: '#FFF' },
+  chipActive: {backgroundColor: '#2196F3'},
+  chipText: {color: '#2196F3', fontWeight: '600'},
+  chipTextActive: {color: '#FFF'},
+  batchContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  miniChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    backgroundColor: '#F5F5F5',
+  },
+  miniChipActive: {
+    backgroundColor: '#2196F3',
+    borderColor: '#2196F3',
+  },
+  miniChipText: {
+    fontSize: 12,
+    color: '#757575',
+    fontWeight: 'bold',
+  },
+  miniChipTextActive: {
+    color: '#FFF',
+  },
+  targetInfoBox: {
+    marginTop: 15,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+  },
 });

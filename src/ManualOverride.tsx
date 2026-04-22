@@ -10,6 +10,7 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
+  BackHandler,
 } from 'react-native';
 import {
   ArrowLeft,
@@ -25,6 +26,7 @@ export default function ManualOverride({
   onClose,
   classSession,
   onUpdate,
+  onBack,
 }: any) {
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,8 +114,23 @@ export default function ManualOverride({
   };
 
   useEffect(() => {
+    const backAction = () => {
+      if (onBack) {
+        onBack();
+        return true;
+      }
+      return false;
+    };
+
+    // 2. Register the listener
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction,
+    );
+
     if (visible) fetchData();
-  }, [visible]);
+    return () => backHandler.remove();
+  }, [visible, onBack]);
 
   // 2. MARK PRESENT (Bulk)
   const submitMarkPresent = async () => {

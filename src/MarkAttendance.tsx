@@ -9,6 +9,7 @@ import {
   ScrollView,
   StatusBar,
   TextInput,
+  BackHandler,
 } from 'react-native';
 import {
   ArrowLeft,
@@ -37,14 +38,27 @@ export default function MarkAttendance({classSession, onBack}: any) {
   const [loading, setLoading] = useState(false);
   const [isError, setIsError] = useState(false);
   const [isHardwareRequired, setIsHardwareRequired] = useState(true); // New variable
+  const [isAlreadyMarked, setIsAlreadyMarked] = useState(false);
 
   // ✅ FIX #1: Added One-Time Code State
   const [inputCode, setInputCode] = useState('');
 
   useEffect(() => {
     runChecks();
+    // 🎯 FIX: Hardware Back Button Listener
+    const backAction = () => {
+      onBack(); // Trigger the standard back navigation passed as a prop
+      return true; // Tells Android we handled the press
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction,
+    );
+
     return () => {
-      manager.stopDeviceScan();
+      manager.stopDeviceScan(); // Stop BLE scan
+      backHandler.remove(); // 🎯 Stop listening for back button
     };
   }, []);
 
@@ -166,6 +180,7 @@ export default function MarkAttendance({classSession, onBack}: any) {
       if (error) {
         if (error.code === '23505') {
           // Handle unique constraint
+          setIsAlreadyMarked(true);
           setStep(2);
           return;
         }
@@ -180,17 +195,41 @@ export default function MarkAttendance({classSession, onBack}: any) {
   };
 
   if (step === 2) {
+    // Define theme based on status
+    const theme = isAlreadyMarked
+      ? {
+          color: '#2196F3',
+          title: 'Already Marked!',
+          sub: 'You have already recorded your attendance for this session.',
+          btnText: '#2196F3',
+        }
+      : {
+          color: '#4CAF50',
+          title: 'Present!',
+          sub: 'Attendance marked successfully',
+          btnText: '#4CAF50',
+        };
+
     return (
       <View style={styles.container}>
-        <StatusBar backgroundColor="#4CAF50" barStyle="light-content" />
-        <View style={[styles.centerContainer, {backgroundColor: '#4CAF50'}]}>
+        <StatusBar backgroundColor={theme.color} barStyle="light-content" />
+        <View style={[styles.centerContainer, {backgroundColor: theme.color}]}>
           <CheckCircle size={100} color="#FFF" />
-          <Text style={styles.successTitle}>Present!</Text>
-          <Text style={{color: '#E8F5E9', marginTop: 10, fontSize: 16}}>
-            Attendance marked successfully
+          <Text style={styles.successTitle}>{theme.title}</Text>
+          <Text
+            style={{
+              color: '#E8F5E9',
+              marginTop: 10,
+              fontSize: 16,
+              textAlign: 'center',
+              paddingHorizontal: 30,
+            }}>
+            {theme.sub}
           </Text>
           <TouchableOpacity style={styles.btnWhite} onPress={onBack}>
-            <Text style={styles.btnTextGreen}>Back to Dashboard</Text>
+            <Text style={[styles.btnTextGreen, {color: theme.btnText}]}>
+              Back to Dashboard
+            </Text>
           </TouchableOpacity>
         </View>
       </View>

@@ -42,40 +42,44 @@ const InfoRow = ({icon: Icon, label, value, isLast = false}: any) => (
 );
 
 export default function StudentDashboard({session, onNavigate}: any) {
-  const [profile, setProfile] = useState<any>(null); // To store real DB data
+  // --- 1. STATE MANAGEMENT ---
+  const [profile, setProfile] = useState<any>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('home');
   const [classes, setClasses] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-
+  const [refreshing, setRefreshing] = useState(false);
   const [heatmapData, setHeatmapData] = useState<
-    {date: string; count: number}[]
+    {date: string; count: number; total: number}[]
   >([]);
   const [stats, setStats] = useState({attended: 0, total: 0});
-  // 1. NEW: Fetch holidays from Supabase
+  const [holidays, setHolidays] = useState<string[]>([]);
 
-  const [holidays, setHolidays] = useState<string[]>([]); // 👈 Array of date strings
-  const [attendanceData, setAttendanceData] = useState<any[]>([]);
+  // --- 2. TOP-LEVEL DATA FETCHING FUNCTIONS ---
+  // (Moved outside of useEffect so onRefresh can call them)
 
-  useEffect(() => {
-    loadHolidays();
-  }, []);
+  const getProfile = async () => {
+    setProfileLoading(true);
+    try {
+      const {data, error} = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
+      if (data) setProfile(data);
+    } catch (err) {
+      console.error('Profile Load Error:', err);
+    } finally {
+      setProfileLoading(false);
+    }
+  };
 
   const loadHolidays = async () => {
     try {
-      const {data, error} = await supabase
-        .from('holidays')
-        .select('holiday_date');
-
-      if (error) throw error;
-
-      if (data) {
-        // Transform: [{holiday_date: '2026-04-14'}] -> ['2026-04-14']
-        const formattedHolidays = data.map(item => item.holiday_date);
-        setHolidays(formattedHolidays);
-      }
+      const {data} = await supabase.from('holidays').select('holiday_date');
+      if (data) setHolidays(data.map(item => item.holiday_date));
     } catch (err) {
-      console.error('Error fetching holidays:', err);
+      console.error('Holiday Fetch Error:', err);
     }
   };
 
@@ -84,9 +88,6 @@ export default function StudentDashboard({session, onNavigate}: any) {
       const {data, error} = await supabase.rpc('get_student_stats', {
         p_student_id: session.user.id,
       });
-
-      if (error) throw error;
-
       if (data && data[0]) {
         setStats({
           attended: parseInt(data[0].attended_count),
@@ -98,19 +99,19 @@ export default function StudentDashboard({session, onNavigate}: any) {
     }
   };
 
-  // 2. Fetch the actual attendance from Supabase
-  useEffect(() => {
-    const loadData = async () => {
-      // 1. Get classes the student actually attended
-      const {data: attendanceData} = await supabase
+  const loadData = async () => {
+    if (!profile) return;
+    try {
+      // Fetch attendance (Numerator)
+      const {data: attData} = await supabase
         .from('attendance')
         .select('marked_at')
         .eq('student_id', session.user.id);
 
-      // 2. Get sessions actually HELD for this student's cohort
-      const {data: sessionsData} = await supabase
+      // Fetch sessions held (Denominator)
+      const {data: sessData} = await supabase
         .from('sessions')
-        .select('id, created_at, is_active, target_batch')
+        .select('id, created_at')
         .eq('target_course', profile.course)
         .eq('target_year', profile.year)
         .eq('target_semester', profile.semester)
@@ -118,97 +119,93 @@ export default function StudentDashboard({session, onNavigate}: any) {
 
       const finalMap: any = {};
 
-      // 🎯 STEP A: Map Sessions Held (The Denominator)
-      // We do this first so dates appear even if the student attended 0 classes
-      sessionsData?.forEach(s => {
+      sessData?.forEach(s => {
         const date = s.created_at.split('T')[0];
         if (!finalMap[date]) finalMap[date] = {attended: 0, held: 0};
         finalMap[date].held += 1;
       });
 
-      // 🎯 STEP B: Map Attendance (The Numerator)
-      attendanceData?.forEach(a => {
+      attData?.forEach(a => {
         const date = a.marked_at.split('T')[0];
         if (!finalMap[date]) finalMap[date] = {attended: 0, held: 0};
         finalMap[date].attended += 1;
-
-        // 🎯 SAFETY: If for some reason the attendance date exists
-        // but the session was on a different UTC day, we force the denominator up
-        if (finalMap[date].attended > finalMap[date].held) {
+        // Ensure denominator is never smaller than numerator
+        if (finalMap[date].attended > finalMap[date].held)
           finalMap[date].held = finalMap[date].attended;
-        }
       });
 
-      // 🎯 STEP C: Convert the combined map into the Heatmap array
       const formattedData = Object.keys(finalMap).map(date => ({
         date: date,
-        count: finalMap[date].attended, // Numerator
-        total: finalMap[date].held, // Denominator
+        count: finalMap[date].attended,
+        total: finalMap[date].held,
       }));
 
       setHeatmapData(formattedData);
-    };
+    } catch (err) {
+      console.error('Heatmap Data Error:', err);
+    }
+  };
 
-    if (profile) loadData();
-  }, [session.user.id, profile]); // 👈 Added profile to dependencies to ensure filters match
-
-  useEffect(() => {
-    const getProfile = async () => {
-      setProfileLoading(true);
-      try {
-        const {data, error} = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-        if (data) setProfile(data);
-      } catch (err) {
-        console.error('Profile Load Error:', err);
-      } finally {
-        setProfileLoading(false);
-      }
-    };
-    getProfile();
-  }, [session.user.id]);
-  // Default values for Profile Tab
-  const email = session?.user?.email || 'user@adsum.com';
-  const role = 'Student';
-  const id = 'S-2025-001';
-
-  // --- 1. REFACTORED: FETCH LIVE CLASSES (COHORT-AWARE) ---
   const fetchLiveClasses = async () => {
     if (!profile?.semester) return;
     setLoading(true);
     try {
-      const {data, error} = await supabase
+      const {data} = await supabase
         .from('sessions')
-        .select('*, subjects!inner(*)') // !inner ensures clean join
+        .select('*, subjects!inner(*)')
         .eq('is_active', true)
         .eq('subjects.target_course', profile.course)
         .eq('subjects.target_year', profile.year)
         .eq('subjects.target_semester', profile.semester)
-        // ONLY show if it's Theory (ALL) OR matches their specific Batch (A/B/C)
         .or(`target_batch.eq.ALL,target_batch.eq.${profile.batch}`)
         .order('created_at', {ascending: false});
 
-      if (error) throw error;
       setClasses(data || []);
     } catch (err) {
-      console.error('Filtering Error:', err);
+      console.error('Live Class Error:', err);
     } finally {
       setLoading(false);
     }
   };
 
+  // --- 3. THE RELOAD LOGIC ---
+  const onRefresh = async () => {
+    setRefreshing(true); // Start the spinner
+    try {
+      await Promise.all([
+        getProfile(),
+        loadHolidays(),
+        fetchPerformanceStats(),
+        loadData(),
+        fetchLiveClasses(),
+      ]);
+    } catch (err) {
+      console.error('Refresh failed:', err);
+    } finally {
+      setRefreshing(false); // Stop the spinner
+    }
+  };
+
+  // --- 4. LIFECYCLE (useEffect) ---
+
+  // Initial load
+  useEffect(() => {
+    getProfile();
+    loadHolidays();
+  }, [session.user.id]);
+
+  // Load secondary data once profile is ready
   useEffect(() => {
     if (profile) {
+      loadData();
       fetchLiveClasses();
       fetchPerformanceStats();
     }
   }, [profile]);
 
+  // --- 5. RENDER HELPERS ---
   const attendancePercentage =
-    stats.total > 0 ? Math.round((stats.attended / stats.total) * 100) : 0;
+    stats.total > 0 ? Math.round((stats.attended / stats.total) * 100) : 100;
 
   // --- CONSISTENT LOGOUT LOGIC ---
   const handleLogout = async () => {
@@ -225,6 +222,8 @@ export default function StudentDashboard({session, onNavigate}: any) {
   const getStatusColor = (status: string) => {
     return {bg: '#4CAF50', text: '#FFFFFF', label: 'Ongoing'};
   };
+  const email = session?.user?.email || 'user@adsum.com'; //
+  const role = 'Student'; //
 
   const renderContent = () => {
     // --- TAB 1: HOME ---
@@ -235,8 +234,8 @@ export default function StudentDashboard({session, onNavigate}: any) {
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
-              refreshing={loading}
-              onRefresh={fetchLiveClasses}
+              refreshing={refreshing} // 🎯 USE THIS instead of 'loading'
+              onRefresh={onRefresh} // 🎯 USE THIS instead of 'fetchLiveClasses'
               colors={['#2196F3']}
             />
           }>

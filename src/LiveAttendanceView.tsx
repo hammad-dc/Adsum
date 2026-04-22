@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Image,
   TextInput,
   ActivityIndicator,
+  BackHandler,
 } from 'react-native';
 import {
   ArrowLeft,
@@ -16,7 +17,7 @@ import {
   Clock,
   Bluetooth,
 } from 'lucide-react-native';
-import { supabase } from './lib/supabase';
+import {supabase} from './lib/supabase';
 
 export default function LiveAttendanceView({
   classSession,
@@ -31,7 +32,7 @@ export default function LiveAttendanceView({
   const fetchAttendees = async () => {
     try {
       // Get all attendance records for this session + Student Profile info
-      const { data, error } = await supabase
+      const {data, error} = await supabase
         .from('attendance')
         .select(
           `
@@ -40,7 +41,7 @@ export default function LiveAttendanceView({
         `,
         )
         .eq('session_id', classSession.id)
-        .order('marked_at', { ascending: false });
+        .order('marked_at', {ascending: false});
 
       if (error) throw error;
       setAttendees(data || []);
@@ -53,6 +54,20 @@ export default function LiveAttendanceView({
 
   // --- 2. Subscribe to Real-Time Updates ---
   useEffect(() => {
+    const backAction = () => {
+      if (onBack) {
+        onBack();
+        return true;
+      }
+      return false;
+    };
+
+    // 2. Register the listener
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction,
+    );
+
     fetchAttendees();
 
     // Listen for NEW rows in 'attendance' table
@@ -75,9 +90,10 @@ export default function LiveAttendanceView({
       .subscribe();
 
     return () => {
+      backHandler.remove();
       supabase.removeChannel(subscription);
     };
-  }, []);
+  }, [onBack]);
 
   const filteredList = attendees.filter(
     item =>
@@ -89,7 +105,7 @@ export default function LiveAttendanceView({
         .includes(searchQuery.toLowerCase()),
   );
 
-  const renderItem = ({ item }: any) => {
+  const renderItem = ({item}: any) => {
     const timeString = new Date(item.marked_at).toLocaleTimeString([], {
       hour: '2-digit',
       minute: '2-digit',
@@ -109,19 +125,15 @@ export default function LiveAttendanceView({
             }}
             style={styles.avatar}
           />
-          <View style={{ flex: 1 }}>
+          <View style={{flex: 1}}>
             <View style={styles.row}>
               <Text style={styles.name}>{name}</Text>
               {item.verification_method === 'bluetooth' && (
-                <Bluetooth
-                  size={14}
-                  color="#2196F3"
-                  style={{ marginLeft: 5 }}
-                />
+                <Bluetooth size={14} color="#2196F3" style={{marginLeft: 5}} />
               )}
             </View>
             <Text style={styles.subText}>{studentId}</Text>
-            <View style={[styles.row, { marginTop: 4 }]}>
+            <View style={[styles.row, {marginTop: 4}]}>
               <Clock size={12} color="#757575" />
               <Text style={styles.timeText}>{timeString}</Text>
             </View>
@@ -143,7 +155,7 @@ export default function LiveAttendanceView({
           <TouchableOpacity onPress={onBack}>
             <ArrowLeft color="#FFF" size={24} />
           </TouchableOpacity>
-          <View style={{ marginLeft: 15 }}>
+          <View style={{marginLeft: 15}}>
             <Text style={styles.headerTitle}>{classSession.name}</Text>
             <Text style={styles.headerSub}>{attendees.length} Present</Text>
           </View>
@@ -170,7 +182,7 @@ export default function LiveAttendanceView({
             data={filteredList}
             renderItem={renderItem}
             keyExtractor={item => item.id.toString()}
-            contentContainerStyle={{ paddingBottom: 100 }}
+            contentContainerStyle={{paddingBottom: 100}}
             ListEmptyComponent={
               <Text style={styles.emptyText}>Waiting for students...</Text>
             }
@@ -182,8 +194,7 @@ export default function LiveAttendanceView({
       <View style={styles.footer}>
         <TouchableOpacity
           style={styles.manualButton}
-          onPress={onManualOverride}
-        >
+          onPress={onManualOverride}>
           <Text style={styles.manualText}>Manual Override</Text>
         </TouchableOpacity>
       </View>
@@ -192,11 +203,11 @@ export default function LiveAttendanceView({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
-  header: { backgroundColor: '#2196F3', padding: 20, paddingBottom: 15 },
-  headerTitle: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
-  headerSub: { color: '#BBDEFB', fontSize: 14 },
-  row: { flexDirection: 'row', alignItems: 'center' },
+  container: {flex: 1, backgroundColor: '#F5F5F5'},
+  header: {backgroundColor: '#2196F3', padding: 20, paddingBottom: 15},
+  headerTitle: {color: '#FFF', fontSize: 20, fontWeight: 'bold'},
+  headerSub: {color: '#BBDEFB', fontSize: 14},
+  row: {flexDirection: 'row', alignItems: 'center'},
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -206,9 +217,9 @@ const styles = StyleSheet.create({
     marginTop: 15,
     height: 45,
   },
-  input: { flex: 1, marginLeft: 10, color: '#333' },
+  input: {flex: 1, marginLeft: 10, color: '#333'},
 
-  content: { flex: 1, padding: 15 },
+  content: {flex: 1, padding: 15},
   card: {
     backgroundColor: '#FFF',
     padding: 15,
@@ -223,9 +234,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#EEE',
     marginRight: 15,
   },
-  name: { fontSize: 16, fontWeight: 'bold', color: '#333' },
-  subText: { color: '#757575', fontSize: 13 },
-  timeText: { color: '#757575', fontSize: 12, marginLeft: 5 },
+  name: {fontSize: 16, fontWeight: 'bold', color: '#333'},
+  subText: {color: '#757575', fontSize: 13},
+  timeText: {color: '#757575', fontSize: 12, marginLeft: 5},
 
   badge: {
     flexDirection: 'row',
@@ -236,9 +247,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  badgeText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
+  badgeText: {color: '#FFF', fontSize: 12, fontWeight: 'bold'},
 
-  emptyText: { textAlign: 'center', marginTop: 50, color: '#999' },
+  emptyText: {textAlign: 'center', marginTop: 50, color: '#999'},
 
   footer: {
     padding: 15,
@@ -253,5 +264,5 @@ const styles = StyleSheet.create({
     borderColor: '#2196F3',
     alignItems: 'center',
   },
-  manualText: { color: '#2196F3', fontWeight: 'bold', fontSize: 16 },
+  manualText: {color: '#2196F3', fontWeight: 'bold', fontSize: 16},
 });

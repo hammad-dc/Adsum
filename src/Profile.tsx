@@ -8,6 +8,7 @@ import {
   Image,
   ScrollView,
   Alert,
+  BackHandler,
 } from 'react-native';
 import {
   ArrowLeft,
@@ -27,6 +28,20 @@ export default function Profile({session, onBack}: any) {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
+    const backAction = () => {
+      if (onBack) {
+        onBack();
+        return true;
+      }
+      return false;
+    };
+
+    // 2. Register the listener
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction,
+    );
+
     const fetchProfile = async () => {
       try {
         const {data, error} = await supabase
@@ -43,7 +58,8 @@ export default function Profile({session, onBack}: any) {
       }
     };
     fetchProfile();
-  }, [session.user.id]);
+    return () => backHandler.remove();
+  }, [session.user.id, onBack]);
   if (loading)
     return (
       <View style={styles.container}>

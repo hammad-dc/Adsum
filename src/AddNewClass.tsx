@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   PermissionsAndroid, // 👈 ADD THIS
   Platform,
+  BackHandler,
 } from 'react-native';
 import {ArrowLeft, Calendar, MapPin, BookOpen} from 'lucide-react-native';
 import {supabase} from './lib/supabase';
@@ -39,8 +40,22 @@ export default function AddNewClass({onBack, onClassCreated}: any) {
   const [selectedBatch, setSelectedBatch] = useState('ALL'); // ALL, A, B, or C
 
   useEffect(() => {
+    const backAction = () => {
+      if (onBack) {
+        onBack(); // Run the back navigation prop passed from the parent
+        return true; // "true" means: I handled it, don't close the app.
+      }
+      return false; // "false" means: I didn't handle it, let the OS decide.
+    };
+
+    // 2. Register the listener
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction,
+    );
     fetchSubjects();
-  }, []);
+    return () => backHandler.remove();
+  }, [onBack]);
 
   const fetchSubjects = async () => {
     const {data, error} = await supabase.from('subjects').select('*');

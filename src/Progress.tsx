@@ -6,10 +6,11 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
+  BackHandler,
 } from 'react-native';
 import {supabase} from './lib/supabase';
 
-export default function Progress({profile, session}: any) {
+export default function Progress({profile, session, onBack}: any) {
   const [subjectStats, setSubjectStats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -36,10 +37,25 @@ export default function Progress({profile, session}: any) {
   };
 
   useEffect(() => {
+    const backAction = () => {
+      if (onBack) {
+        onBack();
+        return true;
+      }
+      return false;
+    };
+
+    // 2. Register the listener
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction,
+    );
+
     if (session?.user?.id) {
       fetchStats();
     }
-  }, [session?.user?.id]);
+    return () => backHandler.remove();
+  }, [session?.user?.id, onBack]);
 
   const onRefresh = () => {
     setRefreshing(true);

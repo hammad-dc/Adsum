@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import {ArrowLeft, Calendar, Filter} from 'lucide-react-native';
 import {supabase} from './lib/supabase';
@@ -15,6 +16,13 @@ export default function AttendanceHistory({onBack}: any) {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'All' | 'Present' | 'Absent'>('All');
   const [stats, setStats] = useState({attended: 0, total: 0});
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchHistoryAndStats(); // Re-runs your DB queries
+    setRefreshing(false);
+  };
 
   // --- 1. Fetch Real History from Supabase ---
   const fetchHistoryAndStats = async () => {
@@ -38,9 +46,14 @@ export default function AttendanceHistory({onBack}: any) {
 
       setHistory(histData || []);
       if (statsData?.[0]) {
+        const attended = parseInt(statsData[0].attended_count) || 0;
+        const total = parseInt(statsData[0].total_possible_count) || 0;
+
+        // 🎯 SAFETY: If attended is higher than total (like 3/0),
+        // we fix it to 3/3 for the UI.
         setStats({
-          attended: parseInt(statsData[0].attended_count),
-          total: parseInt(statsData[0].total_possible_count),
+          attended: attended,
+          total: attended > total ? attended : total,
         });
       }
     } finally {
@@ -133,11 +146,15 @@ export default function AttendanceHistory({onBack}: any) {
         </View>
         <View style={styles.statBox}>
           <Text style={styles.statLabel}>Present</Text>
-          <Text style={[styles.statValue, {color: '#4CAF50'}]}>{presentCount}</Text>
+          <Text style={[styles.statValue, {color: '#4CAF50'}]}>
+            {presentCount}
+          </Text>
         </View>
         <View style={styles.statBox}>
           <Text style={styles.statLabel}>Absent</Text>
-          <Text style={[styles.statValue, {color: '#F44336'}]}>{absentCount}</Text>
+          <Text style={[styles.statValue, {color: '#F44336'}]}>
+            {absentCount}
+          </Text>
         </View>
         <View style={styles.statBox}>
           <Text style={styles.statLabel}>%</Text>
@@ -156,6 +173,9 @@ export default function AttendanceHistory({onBack}: any) {
             data={displayedList}
             renderItem={renderItem}
             keyExtractor={item => item.id.toString()}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
             contentContainerStyle={{paddingBottom: 20}}
             ListEmptyComponent={
               <Text style={{textAlign: 'center', color: '#999', marginTop: 50}}>

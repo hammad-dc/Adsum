@@ -81,7 +81,7 @@ export default function TeacherDashboard({
       // if (sessError) throw sessError;
 
       setClasses(activeSessions || []);
-      setAssignedSubjects(assignedSubjects || []); // 👈 THIS was missing!
+      setAssignedSubjects(assignedSubjects || []);
     } catch (err) {
       console.error('Fetch failed:', err);
     } finally {
@@ -507,9 +507,6 @@ const styles = StyleSheet.create({
   assignedWrapper: {
     marginTop: 10,
     paddingVertical: 5,
-    flexDirection: 'row', // Align chips horizontally
-    flexWrap: 'wrap', // Allow them to move to the next line
-    gap: 10, // Space between chips
   },
   subjectCard: {
     backgroundColor: '#FFF',
@@ -520,7 +517,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     elevation: 2,
     borderLeftWidth: 4,
-    borderLeftColor: '#2196F3', // Highlights it's a "create" action
+    borderLeftColor: '#2196F3',
+    width: '100%' // Highlights it's a "create" action
   },
   subjectIcon: {
     width: 40,

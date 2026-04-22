@@ -36,6 +36,7 @@ export default function MarkAttendance({classSession, onBack}: any) {
   const [currentDist, setCurrentDist] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [isError, setIsError] = useState(false);
+  const [isHardwareRequired, setIsHardwareRequired] = useState(true); // New variable
 
   // ✅ FIX #1: Added One-Time Code State
   const [inputCode, setInputCode] = useState('');
@@ -55,7 +56,10 @@ export default function MarkAttendance({classSession, onBack}: any) {
       .eq('id', classData.id)
       .single();
 
-    if (session?.is_hardware_required === false) {
+    const hardwareNeeded = session?.is_hardware_required ?? true;
+    setIsHardwareRequired(hardwareNeeded);
+
+    if (!hardwareNeeded) {
       // ✅ BYPASS: Teacher allowed code-only attendance
       setBleFound(true);
       setGpsVerified(true);
@@ -115,27 +119,29 @@ export default function MarkAttendance({classSession, onBack}: any) {
   };
 
   const submitAttendance = async () => {
-    // 1. Reset state first to force a UI refresh
     setIsError(false);
 
+    // 1. Validate Code
     if (inputCode !== classData.active_code) {
-      // 2. Trigger error state
       setIsError(true);
-
-      // 3. Clear it after a delay so the user sees a "flash" of red
       setTimeout(() => setIsError(false), 2000);
-
-      Alert.alert(
-        'Invalid Code',
-        `The code ${inputCode} does not match the session code.`,
-        [{text: 'Try Again', onPress: () => setInputCode('')}],
-      );
+      Alert.alert('Invalid Code', 'The code does not match the session.');
       return;
     }
 
-    if (!bleFound && !gpsVerified) {
-      Alert.alert('Verification Failed', 'Bluetooth or GPS signal missing.');
-      return;
+    // 2. Enforce Hardware Checks ONLY if required
+    if (isHardwareRequired) {
+      if (!bleFound) {
+        Alert.alert(
+          'Bluetooth Missing',
+          'Teacher beacon not found. Move closer.',
+        );
+        return;
+      }
+      if (!gpsVerified) {
+        Alert.alert('GPS Error', 'You are outside the classroom geofence.');
+        return;
+      }
     }
 
     setLoading(true);
@@ -143,22 +149,23 @@ export default function MarkAttendance({classSession, onBack}: any) {
       const {
         data: {user},
       } = await supabase.auth.getUser();
-      if (!user) throw new Error('User session lost. Restart app.');
+      if (!user) throw new Error('User session lost.');
 
-      const currentDeviceId = DeviceInfo.getUniqueIdSync();//Capture current hardware ID
+      const currentDeviceId = DeviceInfo.getUniqueIdSync();
 
       const {error} = await supabase.from('attendance').insert({
         session_id: classData.id,
         student_id: user.id,
         status: 'present',
         device_id: currentDeviceId,
-        verification_method: 'biometric', // keeping existing logic
+        verification_method: isHardwareRequired ? 'biometric' : 'code_only',
         location_verified: gpsVerified,
         bluetooth_verified: bleFound,
       });
 
       if (error) {
         if (error.code === '23505') {
+          // Handle unique constraint
           setStep(2);
           return;
         }
@@ -264,51 +271,113 @@ export default function MarkAttendance({classSession, onBack}: any) {
         </View>
 
         <Text style={styles.sectionLabel}>2. SIGNAL CHECKS</Text>
-        {/* Bluetooth */}
-        <View style={styles.checkCard}>
+        {/* Bluetooth Card */}
+        <View
+          style={[
+            styles.checkCard,
+            !isHardwareRequired && {backgroundColor: '#F5F5F5'},
+          ]}>
           <View
             style={[
               styles.iconBox,
-              {backgroundColor: bleFound ? '#E8F5E9' : '#FFF3E0'},
+              {
+                backgroundColor: isHardwareRequired
+                  ? bleFound
+                    ? '#E8F5E9'
+                    : '#FFF3E0'
+                  : '#EEEEEE',
+              },
             ]}>
-            <Bluetooth size={24} color={bleFound ? '#4CAF50' : '#FF9800'} />
+            <Bluetooth
+              size={24}
+              color={
+                isHardwareRequired
+                  ? bleFound
+                    ? '#4CAF50'
+                    : '#FF9800'
+                  : '#9E9E9E'
+              }
+            />
           </View>
           <View style={{flex: 1, marginLeft: 15}}>
-            <Text style={styles.checkTitle}>Teacher Beacon</Text>
+            <Text
+              style={[
+                styles.checkTitle,
+                !isHardwareRequired && {color: '#757575'},
+              ]}>
+              Teacher Beacon
+            </Text>
             <Text style={styles.checkStatus}>
-              {bleFound ? 'Signal Verified' : 'Scanning...'}
+              {!isHardwareRequired
+                ? 'Security Bypassed'
+                : bleFound
+                ? 'Signal Verified'
+                : 'Scanning...'}
             </Text>
           </View>
-          {bleFound ? (
-            <CheckCircle color="#4CAF50" />
+          {isHardwareRequired ? (
+            bleFound ? (
+              <CheckCircle color="#4CAF50" />
+            ) : (
+              <ActivityIndicator size="small" color="#FF9800" />
+            )
           ) : (
-            <ActivityIndicator size="small" color="#FF9800" />
+            <CheckCircle color="#9E9E9E" /> // Neutral check for bypassed state
           )}
         </View>
 
-        {/* GPS */}
-        <View style={styles.checkCard}>
+        {/* GPS Card */}
+        <View
+          style={[
+            styles.checkCard,
+            !isHardwareRequired && {backgroundColor: '#F5F5F5'},
+          ]}>
           <View
             style={[
               styles.iconBox,
-              {backgroundColor: gpsVerified ? '#E8F5E9' : '#FFEBEE'},
+              {
+                backgroundColor: isHardwareRequired
+                  ? gpsVerified
+                    ? '#E8F5E9'
+                    : '#FFEBEE'
+                  : '#EEEEEE',
+              },
             ]}>
-            <MapPin size={24} color={gpsVerified ? '#4CAF50' : '#F44336'} />
+            <MapPin
+              size={24}
+              color={
+                isHardwareRequired
+                  ? gpsVerified
+                    ? '#4CAF50'
+                    : '#F44336'
+                  : '#9E9E9E'
+              }
+            />
           </View>
           <View style={{flex: 1, marginLeft: 15}}>
-            <Text style={styles.checkTitle}>Location Check</Text>
+            <Text
+              style={[
+                styles.checkTitle,
+                !isHardwareRequired && {color: '#757575'},
+              ]}>
+              Location Check
+            </Text>
             <Text style={styles.checkStatus}>
-              {gpsVerified
+              {!isHardwareRequired
+                ? 'Geofence Disabled'
+                : gpsVerified
                 ? `${currentDist}m (Verified)`
-                : currentDist
-                ? `${currentDist}m (Too Far)`
                 : 'Locating...'}
             </Text>
           </View>
-          {gpsVerified ? (
-            <CheckCircle color="#4CAF50" />
+          {isHardwareRequired ? (
+            gpsVerified ? (
+              <CheckCircle color="#4CAF50" />
+            ) : (
+              <ActivityIndicator size="small" color="#2196F3" />
+            )
           ) : (
-            <ActivityIndicator size="small" color="#2196F3" />
+            <CheckCircle color="#9E9E9E" />
           )}
         </View>
 

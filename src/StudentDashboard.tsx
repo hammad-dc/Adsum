@@ -1,5 +1,6 @@
 import React, {useState, useEffect} from 'react';
 import AttendanceGrid from './AttendanceGrid'; // Import the new component
+import Progress from './Progress';
 import {
   View,
   Text,
@@ -13,14 +14,12 @@ import {
   Alert,
 } from 'react-native';
 import {
-  Bell,
   Home,
-  History,
+  TrendingUp,
   User,
   Clock,
   MapPin,
   LogOut,
-  FileText,
   Mail,
   Shield,
   BookOpen,
@@ -111,11 +110,10 @@ export default function StudentDashboard({session, onNavigate}: any) {
       // 2. Get sessions actually HELD for this student's cohort
       const {data: sessionsData} = await supabase
         .from('sessions')
-        .select('created_at')
+        .select('id, created_at, is_active, target_batch')
         .eq('target_course', profile.course)
         .eq('target_year', profile.year)
         .eq('target_semester', profile.semester)
-        .eq('is_active', false) 
         .or(`target_batch.eq.ALL,target_batch.eq.${profile.batch}`);
 
       const finalMap: any = {};
@@ -133,6 +131,12 @@ export default function StudentDashboard({session, onNavigate}: any) {
         const date = a.marked_at.split('T')[0];
         if (!finalMap[date]) finalMap[date] = {attended: 0, held: 0};
         finalMap[date].attended += 1;
+
+        // 🎯 SAFETY: If for some reason the attendance date exists
+        // but the session was on a different UTC day, we force the denominator up
+        if (finalMap[date].attended > finalMap[date].held) {
+          finalMap[date].held = finalMap[date].attended;
+        }
       });
 
       // 🎯 STEP C: Convert the combined map into the Heatmap array
@@ -346,17 +350,9 @@ export default function StudentDashboard({session, onNavigate}: any) {
       );
     }
 
-    // --- TAB 2: HISTORY ---
+    // --- TAB 2: Progress ---
     if (activeTab === 'history') {
-      return (
-        <View style={styles.centerContainer}>
-          <FileText size={60} color="#E0E0E0" />
-          <Text style={styles.placeholderText}>History Coming Soon</Text>
-          <Text style={{color: '#999', fontSize: 12}}>
-            Past attendance records will appear here.
-          </Text>
-        </View>
-      );
+      return <Progress profile={profile} session={session} />;
     }
 
     // --- TAB 3: PROFILE (Polished Look) ---
@@ -445,7 +441,7 @@ export default function StudentDashboard({session, onNavigate}: any) {
         <TouchableOpacity
           style={styles.navItem}
           onPress={() => setActiveTab('history')}>
-          <History
+          <TrendingUp // or keep the History icon if you prefer
             size={24}
             color={activeTab === 'history' ? '#2196F3' : '#757575'}
           />
@@ -454,7 +450,7 @@ export default function StudentDashboard({session, onNavigate}: any) {
               styles.navText,
               activeTab === 'history' && {color: '#2196F3'},
             ]}>
-            History
+            Progress
           </Text>
         </TouchableOpacity>
         <TouchableOpacity

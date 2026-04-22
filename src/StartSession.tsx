@@ -56,56 +56,53 @@ export default function StartSession({classSession, onBack}: any) {
 
   const [showBatchPicker, setShowBatchPicker] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState('ALL');
+  const [isHardwareRequired, setIsHardwareRequired] = useState(true);
 
-  // --- 1. Main Initialization Effect (Runs Once) ---
+  // --- 1. Main Initialization Effect (Runs Once) ---==
+  // --- 1. Main Initialization Effect ---
   useEffect(() => {
-    if (!classSession) return;
+    if (!classSession?.id) return;
 
-    const fetchClassName = async () => {
-      const syncMode = async () => {
-        const {data} = await supabase
-          .from('sessions')
-          .select('is_live_location')
-          .eq('id', classSession.id)
-          .single();
-        if (data) setIsAdHoc(data.is_live_location);
-      };
-      syncMode();
-      const {data} = await supabase
-        .from('class_sessions') // Verify this table name in your DB
-        .select('class_name, name, subject')
+    const initialize = async () => {
+      // A. Handle Subject Pre-selection from Dashboard
+      if (classSession.subject) {
+        setClassName(classSession.subject.name);
+        setSelectedBatch(classSession.subject.target_batch || 'ALL');
+      }
+
+      // B. Fetch persistence data (Hardware Requirement & Mode)
+      const {data: sessData} = await supabase
+        .from('sessions')
+        .select('class_name, is_live_location, is_hardware_required, is_active')
         .eq('id', classSession.id)
         .single();
-      if (data) {
-        setClassName(
-          data.class_name || data.name || data.subject || 'Unknown Class',
-        );
-      }
-    };
-    fetchClassName();
 
-    // A. Startup Sequence
-    const initialize = async () => {
-      const granted = await requestBluetoothPermissions();
-      if (!granted) {
-        Alert.alert(
-          'Permission Error',
-          'Bluetooth permissions are missing. Please allow "Nearby Devices" in Settings.',
-        );
-        return;
-      }
+      if (sessData) {
+        // 🎯 This is what ensures the toggle stays OFF if you set it to OFF previously
+        setIsHardwareRequired(sessData.is_hardware_required);
+        setBeaconActive(sessData.is_hardware_required);
+        setIsAdHoc(sessData.is_live_location);
 
-      BLEAdvertiser.setCompanyId(0xff);
+        // Sync class name if not provided by nav
+        if (!classSession.subject) {
+          setClassName(sessData.class_name || 'Unknown Class');
+        }
 
-      if (classSession.is_active) {
-        startBroadcast();
+        // C. Start signal if it was already active
+        if (sessData.is_active && sessData.is_hardware_required) {
+          const granted = await requestBluetoothPermissions();
+          if (granted) {
+            BLEAdvertiser.setCompanyId(0xff);
+            startBroadcast();
+          }
+        }
       }
+      fetchCounts();
     };
 
     initialize();
 
-    // B. Supabase Real-time Sync
-    fetchCounts();
+    // D. Real-time Subscription
     const sub = supabase
       .channel('live-room')
       .on(
@@ -116,27 +113,26 @@ export default function StartSession({classSession, onBack}: any) {
           table: 'attendance',
           filter: `session_id=eq.${classSession.id}`,
         },
-        payload => fetchCounts(),
+        () => fetchCounts(),
       )
       .subscribe();
 
-    // C. Hardware Back Button Handler
+    const onBackPress = () => {
+      onBack(); // Call your app's back function
+      return true; // Prevents the app from closing entirely
+    };
     const backHandler = BackHandler.addEventListener(
       'hardwareBackPress',
-      () => {
-        onBack();
-        return true;
-      },
+      onBackPress,
     );
 
-    // D. Cleanup (Stop everything when leaving screen)
     return () => {
       stopBroadcast();
       supabase.removeChannel(sub);
       backHandler.remove();
     };
-  }, []); // Empty dependency array = Runs only on mount
-
+  }, [classSession.id]); // Triggered by session ID
+  // Dependency on ID is safer
   // --- 2. Timer Effect (Runs only when timer state changes) ---
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -468,24 +464,29 @@ export default function StartSession({classSession, onBack}: any) {
                 value={beaconActive}
                 trackColor={{false: '#E0E0E0', true: '#A5D6A7'}}
                 thumbColor={beaconActive ? '#4CAF50' : '#f4f3f4'}
-                onValueChange={val => {
+                onValueChange={async val => {
+                  // 1. Immediate local update
+                  setBeaconActive(val);
+                  setIsHardwareRequired(val);
+
+                  // 2. Persist to Supabase immediately
+                  const {error} = await supabase
+                    .from('sessions')
+                    .update({is_hardware_required: val})
+                    .eq('id', classSession.id);
+
+                  if (error) {
+                    console.error('Toggle sync failed:', error);
+                    return;
+                  }
+
+                  // 3. Control hardware
                   if (!val) {
                     Alert.alert(
-                      '⚠️ Disable Hardware Security?',
-                      'Students will be able to mark attendance using ONLY the security code. Bluetooth and Location checks will be bypassed. Are you sure?',
-                      [
-                        {
-                          text: 'Cancel',
-                          style: 'cancel',
-                          onPress: () => setBeaconActive(true),
-                        },
-                        {
-                          text: 'Yes, Disable',
-                          style: 'destructive',
-                          onPress: () => stopBroadcast(),
-                        },
-                      ],
+                      'Security OFF',
+                      'Hardware checks are now disabled for this session.',
                     );
+                    stopBroadcast();
                   } else {
                     startBroadcast();
                   }
@@ -613,7 +614,7 @@ export default function StartSession({classSession, onBack}: any) {
         </View>
 
         <View style={{height: 50}} />
-      </ScrollView> 
+      </ScrollView>
       <Modal visible={showBatchPicker} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.batchCard}>
@@ -692,12 +693,12 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: '#FFF',
-    fontFamily: 'sans-serif-medium',
-    fontSize: 25, // Big font
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    marginLeft: 15, // ✅ Add space between Arrow and Name
+    fontSize: 22, // Big font
+    fontWeight: '600',
+    letterSpacing: 0.3,
+    marginLeft: 12, // ✅ Add space between Arrow and Name
     flex: 1,
+    lineHeight: 28,
   },
   // headerSub removed
 

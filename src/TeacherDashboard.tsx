@@ -52,36 +52,41 @@ export default function TeacherDashboard({
   const [activeTab, setActiveTab] = useState('dashboard');
   const [classes, setClasses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [assignedSubjects, setAssignedSubjects] = useState<any[]>([]); // For the bottom list
 
   const teacherEmailSeed = getProfileSeed(teacher);
 
   const fetchClasses = async () => {
     setLoading(true);
-
-    console.log('🔍 Fetching for Teacher ID:', teacher.id); // DEBUG
-
     try {
-      const {data: activeSessions, error: sessErr} = await supabase
+      // 1. Fetch active sessions (Ongoing)
+      const {data: activeSessions} = await supabase
         .from('sessions')
         .select('*, subjects(*)')
         .eq('teacher_id', teacher.id)
-        .eq('is_active', true)
-        .order('created_at', {ascending: false});
+        .eq('is_active', true);
 
-      const {data: assignedSubjects, error: subErr} = await supabase
-        .from('subjects')
-        .select('*')
+      // 2. 🎯 FIX: Fetch Subjects via the Assignment Bridge Table
+      const {data: assignments, error: subErr} = await supabase
+        .from('subject_assignments')
+        .select(
+          `
+        subjects (
+          id, name, code, target_course, target_year, target_semester, type
+        )
+      `,
+        )
         .eq('teacher_id', teacher.id);
 
-      console.log('📚 Assigned Subjects Found:', assignedSubjects?.length);
+      if (subErr) throw subErr;
 
-      console.log('📡 Live Sessions Found:', activeSessions?.length);
-      if (sessErr || subErr) throw sessErr || subErr;
-      // if (sessError) throw sessError;
+      // Transform the joined data into a clean array
+      const mappedSubjects =
+        assignments?.map(a => a.subjects).filter(Boolean) || [];
 
       setClasses(activeSessions || []);
-      setAssignedSubjects(assignedSubjects || []);
+      setAssignedSubjects(mappedSubjects); // Now only shows relevant subjects
     } catch (err) {
       console.error('Fetch failed:', err);
     } finally {
@@ -89,26 +94,37 @@ export default function TeacherDashboard({
     }
   };
 
+  const fetchTeacherProfile = async () => {
+    if (!teacher?.id) return; // ✅ Don't fetch if ID is missing yet
+
+    const {data, error} = await supabase
+      .from('profiles')
+      .select('name, employee_id, email')
+      .eq('id', teacher.id)
+      .single();
+
+    if (error) {
+      console.error('Profile fetch error:', error.message);
+    } else if (data) {
+      setProfile(data);
+    }
+  };
   useEffect(() => {
-    const fetchTeacherProfile = async () => {
-      if (!teacher?.id) return; // ✅ Don't fetch if ID is missing yet
-
-      const {data, error} = await supabase
-        .from('profiles')
-        .select('name, employee_id, email')
-        .eq('id', teacher.id)
-        .single();
-
-      if (error) {
-        console.error('Profile fetch error:', error.message);
-      } else if (data) {
-        setProfile(data);
-      }
-    };
-
     fetchClasses();
     fetchTeacherProfile();
   }, [teacher?.id]); // ✅ Re-run if teacher ID changes/loads
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      // Re-run both fetchers to update everything
+      await Promise.all([fetchClasses(), fetchTeacherProfile()]);
+    } catch (err) {
+      console.error('Refresh failed:', err);
+    } finally {
+      setRefreshing(false); // Stop the spinner
+    }
+  };
 
   const handleLogout = async () => {
     Alert.alert('Sign Out', 'Are you sure you want to log out?', [
@@ -150,6 +166,18 @@ export default function TeacherDashboard({
         <View style={styles.cardHeader}>
           <View style={{flex: 1}}>
             <Text style={styles.className}>{displayName}</Text>
+            <Text
+              style={{
+                fontSize: 12,
+                fontWeight: 'bold',
+                color: item.target_batch === 'ALL' ? '#2196F3' : '#9C27B0',
+                marginBottom: 4,
+              }}>
+              {item.target_batch === 'ALL'
+                ? 'Theory Lecture'
+                : `Practical - Batch ${item.target_batch}`}
+            </Text>
+
             <View style={styles.metaRow}>
               <Clock size={14} color="#757575" />
               <Text style={styles.metaText}>{timeString}</Text>
@@ -223,7 +251,9 @@ export default function TeacherDashboard({
               </View>
               <TouchableOpacity
                 style={styles.addButton}
-                onPress={() => onNavigate && onNavigate('add-class')}>
+                onPress={() =>
+                  onNavigate && onNavigate('add-class', {teacherId: teacher.id})
+                }>
                 <Plus color="#2196F3" size={24} />
               </TouchableOpacity>
             </View>
@@ -251,7 +281,14 @@ export default function TeacherDashboard({
 
           <ScrollView
             contentContainerStyle={{flexGrow: 1}} // Allows the content to stretch and scroll
-            showsVerticalScrollIndicator={false}>
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={['#2196F3']} // Adsum Blue
+              />
+            }>
             <View style={styles.listContainer}>
               {/* --- UPPER PART: ONGOING SESSIONS --- */}
               <Text style={styles.sectionTitle}>Ongoing Sessions</Text>
@@ -281,7 +318,11 @@ export default function TeacherDashboard({
                     key={`assigned-${item.id}`}
                     style={styles.subjectCard}
                     onPress={() =>
-                      onNavigate && onNavigate('add-class', {subject: item})
+                      onNavigate &&
+                      onNavigate('add-class', {
+                        initialSubject: item,
+                        teacherId: teacher.id, // 🎯 Also pass it here
+                      })
                     }>
                     <View style={styles.subjectIcon}>
                       <BookOpen color="#2196F3" size={20} />
@@ -518,7 +559,7 @@ const styles = StyleSheet.create({
     elevation: 2,
     borderLeftWidth: 4,
     borderLeftColor: '#2196F3',
-    width: '100%' // Highlights it's a "create" action
+    width: '100%', // Highlights it's a "create" action
   },
   subjectIcon: {
     width: 40,

@@ -301,11 +301,13 @@ export default function StudentDashboard({session, onNavigate}: any) {
                   <View style={styles.cardHeader}>
                     <View style={{flex: 1}}>
                       <Text style={styles.className}>{displayName}</Text>
+
                       <Text
                         style={{
                           fontSize: 12,
                           fontWeight: 'bold',
-                          color: '#2196F3',
+                          color:
+                            item.target_batch === 'ALL' ? '#2196F3' : '#9C27B0',
                           marginBottom: 4,
                         }}>
                         {item.target_batch === 'ALL'

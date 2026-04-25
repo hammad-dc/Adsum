@@ -17,7 +17,7 @@ import {
 import {ArrowLeft, Calendar, MapPin, BookOpen} from 'lucide-react-native';
 import {supabase} from './lib/supabase';
 
-export default function AddNewClass({onBack, onClassCreated}: any) {
+export default function AddNewClass({onBack, onClassCreated, params}: any) {
   const [isAdHoc, setIsAdHoc] = useState(true);
   const [loading, setLoading] = useState(false);
 
@@ -38,7 +38,9 @@ export default function AddNewClass({onBack, onClassCreated}: any) {
   const [targetYear, setTargetYear] = useState('SE'); // FE, SE, TE, BE
   const [targetSemester, setTargetSemester] = useState(4);
   const [selectedBatch, setSelectedBatch] = useState('ALL'); // ALL, A, B, or C
+  const [subjects, setSubjects] = useState<any[]>([]);
 
+  const teacherId = params?.teacherId;
   useEffect(() => {
     const backAction = () => {
       if (onBack) {
@@ -53,17 +55,42 @@ export default function AddNewClass({onBack, onClassCreated}: any) {
       'hardwareBackPress',
       backAction,
     );
-    fetchSubjects();
+    fetchMySubjects();
     return () => backHandler.remove();
-  }, [onBack]);
+  }, [onBack, teacherId]);
 
-  const fetchSubjects = async () => {
-    const {data, error} = await supabase.from('subjects').select('*');
-    if (!error && data && data.length > 0) {
-      // Combine defaults with real DB data
-      setSavedSubjects(prev => [...prev, ...data]);
+  const fetchMySubjects = async () => {
+    if (!teacherId) return; // 🎯 Safety check
+    try {
+      // 🎯 JOIN logic: Get subjects THROUGH the assignment bridge
+      const {data, error} = await supabase
+        .from('subject_assignments')
+        .select(
+          `
+        subjects (
+          id, name, code, target_course, target_year, target_semester, type
+        )
+      `,
+        )
+        .eq('teacher_id', params?.teacherId || teacherId); // Ensure you pass teacherId in props
+
+      if (error) throw error;
+
+      // Transform joined data: [{subjects: {...}}, {subjects: {...}}] -> [{...}, {...}]
+      const mappedData = data?.map(item => item.subjects).filter(Boolean) || [];
+
+      setSubjects(mappedData);
+    } catch (err) {
+      console.error('Error fetching assigned subjects:', err);
     }
   };
+
+  useEffect(() => {
+    if (params?.initialSubject) {
+      console.log('Auto-filling subject:', params.initialSubject.name);
+      selectSubject(params.initialSubject); // This fills all the fields for you
+    }
+  }, [params]);
 
   const selectSubject = (subject: any) => {
     setSubjectName(subject.name);
@@ -73,12 +100,15 @@ export default function AddNewClass({onBack, onClassCreated}: any) {
     if (subject.target_year) setTargetYear(subject.target_year);
     if (subject.target_semester) setTargetSemester(subject.target_semester);
 
-    if (subject.name.toLowerCase().includes('lab')) {
-      setRoom('Lab 1');
-      setSelectedBatch('A'); // Default to Batch A for labs
+    const isPractical =
+      subject.type === 'Lab' || subject.name.toLowerCase().includes('lab');
+
+    if (isPractical) {
+      setRoom(subject.default_room || 'Lab 1');
+      setSelectedBatch('A'); // Default to first batch for Labs
     } else {
-      setRoom('Room 304');
-      setSelectedBatch('ALL');
+      setRoom(subject.default_room || 'Room 304');
+      setSelectedBatch('ALL'); // Force 'ALL' for Theory
     }
   };
 
@@ -206,7 +236,7 @@ export default function AddNewClass({onBack, onClassCreated}: any) {
       </View>
 
       <ScrollView style={styles.content}>
-        <View style={styles.card}>
+        {/* <View style={styles.card}>
           <View style={styles.rowBetween}>
             <View>
               <Text style={styles.label}>Instant Mode</Text>
@@ -219,36 +249,38 @@ export default function AddNewClass({onBack, onClassCreated}: any) {
               thumbColor={isAdHoc ? '#2196F3' : '#f4f3f4'}
             />
           </View>
-        </View>
+        </View> */}
 
         {/* ✅ FIX: Quick Select is BACK and visible immediately */}
         <View style={styles.quickSelectContainer}>
-          <Text style={styles.sectionHeader}>Quick Select</Text>
+          <Text style={styles.sectionHeader}>
+            Quick Select Assigned Subject
+          </Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            style={styles.chipScroll}>
-            {savedSubjects.map((sub, index) => (
-              <TouchableOpacity
-                key={`${sub.id}-${index}`}
-                style={[
-                  styles.chip,
-                  selectedSubjectId === sub.id && styles.chipActive,
-                ]}
-                onPress={() => selectSubject(sub)}>
-                <BookOpen
-                  size={14}
-                  color={selectedSubjectId === sub.id ? '#FFF' : '#2196F3'}
-                />
-                <Text
+            style={styles.quickSelectScroll}>
+            {subjects.length > 0 ? (
+              subjects.map(sub => (
+                <TouchableOpacity
+                  key={sub.id}
                   style={[
-                    styles.chipText,
-                    selectedSubjectId === sub.id && styles.chipTextActive,
-                  ]}>
-                  {sub.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                    styles.subjectChip,
+                    selectedSubjectId === sub.id && styles.subjectChipActive,
+                  ]}
+                  onPress={() => selectSubject(sub)}>
+                  <Text
+                    style={[
+                      styles.chipText,
+                      selectedSubjectId === sub.id && styles.chipTextActive,
+                    ]}>
+                    {sub.code} {/* 🎯 Use Code (e.g. CSC402) for the chip UI */}
+                  </Text>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <Text style={styles.emptyText}>No subjects assigned to you.</Text>
+            )}
           </ScrollView>
         </View>
 
@@ -256,37 +288,38 @@ export default function AddNewClass({onBack, onClassCreated}: any) {
         <View style={styles.card}>
           <Text style={styles.sectionHeader}>Target Students</Text>
 
-          <View style={styles.rowBetween}>
-            <Text style={styles.label}>Batch Selection</Text>
-            <View style={styles.batchContainer}>
-              {['ALL', 'A', 'B', 'C'].map(b => (
-                <TouchableOpacity
-                  key={b}
-                  onPress={() => setSelectedBatch(b)}
-                  style={[
-                    styles.miniChip,
-                    selectedBatch === b && styles.miniChipActive,
-                  ]}>
-                  <Text
+          {/* 🎯 Only show Batch Selection if it's NOT a Theory lecture */}
+          {selectedBatch !== 'ALL' ? (
+            <View style={styles.rowBetween}>
+              <Text style={styles.label}>Batch Selection: </Text>
+              <View style={styles.batchContainer}>
+                {['A', 'B', 'C'].map(b => (
+                  <TouchableOpacity
+                    key={b}
+                    onPress={() => setSelectedBatch(b)}
                     style={[
-                      styles.miniChipText,
-                      selectedBatch === b && styles.miniChipTextActive,
+                      styles.miniChip,
+                      selectedBatch === b && styles.miniChipActive,
                     ]}>
-                    {b}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text
+                      style={[
+                        styles.miniChipText,
+                        selectedBatch === b && styles.miniChipTextActive,
+                      ]}>
+                      {b}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
-          </View>
-
-          <View style={styles.targetInfoBox}>
-            <Text style={styles.subLabel}>
-              Pushing to:{' '}
-              <Text style={{fontWeight: 'bold', color: '#2196F3'}}>
-                {targetYear} - Sem {targetSemester} ({targetCourse})
+          ) : (
+            <View style={styles.theoryLockBox}>
+              <BookOpen size={16} color="#4CAF50" />
+              <Text style={styles.theoryLockText}>
+                Full Class (Theory) - No Batch Selection Required
               </Text>
-            </Text>
-          </View>
+            </View>
+          )}
         </View>
 
         <View style={styles.card}>
@@ -391,7 +424,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   buttonText: {color: '#FFF', fontSize: 16, fontWeight: 'bold'},
-  quickSelectContainer: {marginBottom: 15},
+  quickSelectContainer: {
+    marginBottom: 20,
+    paddingHorizontal: 5,
+  },
+  quickSelectScroll: {
+    marginTop: 10,
+    paddingBottom: 5,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: '#999',
+    fontStyle: 'italic',
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  subjectChip: {
+    padding: 12,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    marginRight: 10,
+    minWidth: 100,
+    alignItems: 'center',
+  },
+  subjectChipActive: {
+    backgroundColor: '#2196F3',
+  },
+  chipSubName: {
+    fontSize: 10,
+    color: '#757575',
+    marginTop: 2,
+  },
   chipScroll: {flexDirection: 'row'},
   chip: {
     flexDirection: 'row',
@@ -413,9 +476,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   miniChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#E0E0E0',
     backgroundColor: '#F5F5F5',
@@ -425,12 +488,29 @@ const styles = StyleSheet.create({
     borderColor: '#2196F3',
   },
   miniChipText: {
-    fontSize: 12,
+    fontSize: 16,
     color: '#757575',
     fontWeight: 'bold',
   },
   miniChipTextActive: {
     color: '#FFF',
+  },
+  theoryLockBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5', // Light gray background
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    marginTop: 5,
+    gap: 8,
+  },
+  theoryLockText: {
+    fontSize: 13,
+    color: '#4CAF50', // Success green to indicate it's auto-handled
+    fontWeight: '600',
+    flex: 1,
   },
   targetInfoBox: {
     marginTop: 15,

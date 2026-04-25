@@ -52,10 +52,8 @@ export default function App() {
         .single();
 
       if (data) {
-
         setUserRole(data.role);
       } else {
-       
         setUserRole('student');
       }
       // if (data) setUserRole(data.role);
@@ -89,7 +87,16 @@ export default function App() {
   // --- TEACHER FLOW ---
   if (userRole === 'teacher') {
     if (currentScreen === 'add-class')
-      return <AddNewClass onBack={goHome} onClassCreated={goHome} />;
+      return (
+        <AddNewClass
+          onBack={goHome}
+          onClassCreated={() => {
+            // You might need a ref or a shared state to trigger fetchClasses here
+            goHome();
+          }}
+          params={selectedData} // ✅ FIX: Pass the subject data here
+        />
+      );
 
     if (currentScreen === 'start-session' && selectedData) {
       return <StartSession classSession={selectedData} onBack={goHome} />;
@@ -102,11 +109,13 @@ export default function App() {
       <TeacherDashboard
         teacher={{
           id: session.user.id, // ✅ CRITICAL: Add this line!
-          name:
-            session.user.user_metadata?.name || "Faculty Member",
+          name: session.user.user_metadata?.name || 'Faculty Member',
           email: session.user.email,
         }}
-        onNavigate={setCurrentScreen}
+        onNavigate={(screen: string, data: any) => {
+          if (data) setSelectedData(data); // 🎯 This saves the subject info
+          setCurrentScreen(screen);
+        }}
         onSelectClass={(data: any) => {
           setSelectedData(data);
           setCurrentScreen('start-session');

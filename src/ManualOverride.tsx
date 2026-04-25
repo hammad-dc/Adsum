@@ -115,13 +115,15 @@ export default function ManualOverride({
 
   useEffect(() => {
     const backAction = () => {
-      if (onBack) {
-        onBack();
-        return true;
+      if (visible) {
+        // 🎯 Use 'onClose' instead of 'onBack'
+        if (onClose) {
+          onClose();
+          return true; // Prevents the app from closing
+        }
       }
       return false;
     };
-
     // 2. Register the listener
     const backHandler = BackHandler.addEventListener(
       'hardwareBackPress',
@@ -130,7 +132,7 @@ export default function ManualOverride({
 
     if (visible) fetchData();
     return () => backHandler.remove();
-  }, [visible, onBack]);
+  }, [visible, onClose]);
 
   // 2. MARK PRESENT (Bulk)
   const submitMarkPresent = async () => {
@@ -186,48 +188,52 @@ export default function ManualOverride({
   };
 
   const renderItem = ({item}: any) => {
-    const isSelected = selectedIds.has(item.id);
+    const isSelected = selectedIds.has(item.id); //
 
     return (
       <View style={styles.card}>
-        <View style={styles.row}>
+        <View style={[styles.row, {alignItems: 'flex-start'}]}>
           <Image
             source={{
               uri: `https://api.dicebear.com/9.x/initials/png?seed=${item.name}`,
             }}
-            style={styles.avatar}
+            style={[styles.avatar, {marginTop: 5}]} //
           />
-          <View style={{flex: 1}}>
-            <View style={styles.nameRow}>
-              <Text style={styles.name}>{item.name}</Text>
-              {/* ⚠️ Proxy Warning Badge */}
-              {item.isProxySuspected && (
-                <View style={styles.proxyBadge}>
-                  <AlertTriangle size={12} color="#FF9800" />
-                  <Text style={styles.proxyText}>Proxy?</Text>
-                </View>
-              )}
-            </View>
+
+          {/* 🎯 Name Section - No more truncating */}
+          <View style={{flex: 1, marginRight: 10}}>
+            <Text style={styles.name}>{item.name}</Text>
             <Text style={styles.subText}>{item.student_id}</Text>
           </View>
 
-          {/* ACTION BUTTONS */}
-          {item.isPresent ? (
-            <TouchableOpacity
-              style={styles.verifiedBadge}
-              onPress={() => removeStudent(item.id, item.name)}>
-              <CheckCircle size={20} color="#4CAF50" />
-              <Text style={styles.verifiedText}>Verified</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity onPress={() => toggleSelection(item.id)}>
-              {isSelected ? (
-                <CheckCircle size={24} color="#2196F3" />
-              ) : (
-                <View style={styles.circle} />
-              )}
-            </TouchableOpacity>
-          )}
+          {/* 🎯 Badge Column - Stacked Vertically */}
+          <View style={{alignItems: 'flex-end', gap: 4, minWidth: 90}}>
+            {item.isPresent ? (
+              <TouchableOpacity
+                style={styles.verifiedBadge}
+                onPress={() => removeStudent(item.id, item.name)} //
+              >
+                <CheckCircle size={16} color="#4CAF50" />
+                <Text style={styles.verifiedText}>Verified</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity onPress={() => toggleSelection(item.id)}>
+                {isSelected ? (
+                  <CheckCircle size={24} color="#2196F3" />
+                ) : (
+                  <View style={styles.circle} />
+                )}
+              </TouchableOpacity>
+            )}
+
+            {/* ⚠️ Proxy Flag appears directly UNDER the Verified status */}
+            {item.isProxySuspected && (
+              <View style={[styles.proxyBadge, {marginRight: 0, marginTop: 2}]}>
+                <AlertTriangle size={12} color="#FF9800" />
+                <Text style={styles.proxyText}>Proxy?</Text>
+              </View>
+            )}
+          </View>
         </View>
       </View>
     );
@@ -237,7 +243,8 @@ export default function ManualOverride({
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle="pageSheet">
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}>
       <View style={styles.container}>
         <View style={styles.header}>
           <View style={styles.row}>
@@ -327,7 +334,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#EEE',
     marginRight: 15,
   },
-  name: {fontSize: 16, fontWeight: 'bold', color: '#333'},
+  name: {fontSize: 16, fontWeight: 'bold', color: '#333', lineHeight: 22},
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -339,6 +346,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#FFE0B2',
     marginLeft: 8,
   },
   proxyText: {
@@ -363,8 +372,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#E8F5E9',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
+    borderRadius: 8,
+    justifyContent: 'center',
   },
   verifiedText: {fontSize: 12, color: '#4CAF50', fontWeight: 'bold'},
 

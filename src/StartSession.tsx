@@ -29,7 +29,7 @@ import ManualOverride from './ManualOverride';
 
 const APP_UUID = '0000AD50-0000-1000-8000-00805F9B34FB';
 
-export default function StartSession({classSession, onBack}: any) {
+export default function StartSession({classSession, onBack, onNavigate}: any) {
   // Inside export default function StartSession
   const [loading, setLoading] = useState(false); // ✅ Added missing state
 
@@ -198,32 +198,40 @@ export default function StartSession({classSession, onBack}: any) {
 
   const startBroadcast = async () => {
     try {
-      console.log('Starting broadcast...');
+      setLoading(true); // 🎯 Show loading state while hardware starts
+      console.log('Preparing hardware...');
 
-      // Stop previous signal to prevent hardware clash
+      // 1. Double check permissions first
+      const granted = await requestBluetoothPermissions();
+      if (!granted) throw new Error('Permissions missing');
+
+      // 2. Stop any existing broadcast safely
       await BLEAdvertiser.stopBroadcast().catch(() => {});
 
-      // Safety Delay for Android Bluetooth hardware
-      await new Promise<void>(resolve => setTimeout(() => resolve(), 500));
+      // 3. 🎯 CRITICAL: Give Android hardware a second to breathe
+      await new Promise(resolve => setTimeout(resolve, 800));
 
+      BLEAdvertiser.setCompanyId(0xff);
       await BLEAdvertiser.broadcast(APP_UUID, [12, 34], {
         advertiseMode: 1,
         txPowerLevel: 3,
         connectable: false,
         includeDeviceName: false,
-        includeTxPowerLevel: false,
       });
 
       console.log('Broadcast active');
       setBeaconActive(true);
-      updateLocation();
+      updateLocation(); //
     } catch (e: any) {
       console.log('Broadcast Error:', e);
       setBeaconActive(false);
+      // 🎯 If it fails, give a more specific alert
       Alert.alert(
         'Signal Error',
-        'Ensure Bluetooth and GPS are ON in your phone settings.',
+        'Please toggle your Bluetooth OFF and then ON again to reset the adapter.',
       );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -569,38 +577,41 @@ export default function StartSession({classSession, onBack}: any) {
           </TouchableOpacity>
         </View>
 
-        {/* ---------------- PROGRESS BAR ---------------- */}
-        <View style={styles.card}>
+        {/* ---------------- MERGED STATS & CLASS LIST CARD ---------------- */}
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.7}
+          onPress={() => setShowManual(true)}>
           <View style={styles.rowBetween}>
-            <Text style={styles.statLabel}>
-              Present:{' '}
-              <Text style={{fontWeight: 'bold', color: '#2196F3'}}>
-                {attendeeCount}
-              </Text>{' '}
-              / {totalStudents}
-            </Text>
-            <Text style={styles.percentText}>{percentage}%</Text>
+            <View>
+              <Text style={styles.statLabel}>
+                Present:{' '}
+                <Text style={{fontWeight: 'bold', color: '#2196F3'}}>
+                  {attendeeCount}
+                </Text>{' '}
+                / {totalStudents}
+              </Text>
+              <Text style={{color: '#999', fontSize: 11, marginTop: 2}}>
+                Tap to see who is present
+              </Text>
+            </View>
+            <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+              <Text style={styles.percentText}>{percentage}%</Text>
+              <Eye size={20} color="#2196F3" />
+            </View>
           </View>
+
           <View style={styles.progressBarBg}>
             <View style={[styles.progressBarFill, {width: `${percentage}%`}]} />
           </View>
-        </View>
+        </TouchableOpacity>
 
-        {/* ---------------- FOOTER (Spread Out) ---------------- */}
-        <View style={{marginTop: 10}}>
-          <TouchableOpacity style={styles.footerButton}>
-            <Eye size={24} color="#555" />
-            <Text style={styles.footerText}>Class List</Text>
-          </TouchableOpacity>
-
+        {/* ---------------- SLIM END CLASS BUTTON ---------------- */}
+        <View style={{marginTop: 5}}>
           <TouchableOpacity
             style={[
               styles.footerButton,
-              {
-                borderColor: '#FFEBEE',
-                backgroundColor: '#FFEBEE',
-                marginTop: 15,
-              },
+              {borderColor: '#FFEBEE', backgroundColor: '#FFEBEE'},
             ]}
             onPress={finalizeClass}>
             <Text
@@ -608,7 +619,7 @@ export default function StartSession({classSession, onBack}: any) {
                 styles.footerText,
                 {color: '#D32F2F', fontWeight: 'bold'},
               ]}>
-              End Class & Submit
+              End Class & Submit Attendance
             </Text>
           </TouchableOpacity>
         </View>

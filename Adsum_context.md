@@ -158,6 +158,28 @@ Here is the updated content for your **Adsum_context.md** file to reflect the la
     **Vertical Badge Stacking**: Re-engineered the `ManualOverride` student list to prevent UI overlap. Verified status and "Proxy Suspect" flags are now stacked vertically in a right-aligned column, ensuring that full student names remain visible without truncation.
     **Hardware Back-Button Guard**: Integrated `onRequestClose` and custom `BackHandler` listeners within Modals. This ensures that the physical back button on Android devices correctly slides down the student list or batch picker rather than exiting the entire app or dashboard.
     **Theory Lock UI**: Added a "Shielded" `theoryLockBox` in the session creation flow. When a Theory subject is selected, the batch-picker UI is replaced with a success-green badge indicating that the session is automatically locked to the full class.
+    **Personalized Filtering**: By switching to the subject_assignments table, we eliminated the "shitty" 30-subject scroll and restricted teachers to only their mapped subjects.
+
+    This is a great summary of where we are. We've moved from basic session tracking to a data-driven **Academic Analytics** suite. Here is Section 15, condensed to reflect our most recent engineering wins regarding teacher reporting and UI standardization.
+
+---
+
+15. The Academic Analytics & Navigation Standard (May 2026)**
+
+    **Standardized Reporting Architecture**
+    **Unified Naming Convention**: Standardized all reporting logic under the **`AcademicReports`** namespace. This eliminated developer friction by aligning the component name, navigation key (`academic-reports`), and UI labels across the ERP.
+    **Direct-Access Navigation**: Removed the "Reports Coming Soon" landing page. Clicking the "Reports" bottom-nav button or the Profile menu shortcut now triggers a direct screen-switch via the `App.tsx` bridge, providing instant access to data.
+    **Bottom-Nav Persistence**: Re-engineered the `AcademicReports` screen to include the standardized `bottomNav` component. This ensures teachers can switch back to the Dashboard or Profile without relying solely on the hardware back button.
+
+    **High-Integrity Analytics (SQL & Logic)**
+    **Teacher-Isolated RPC**: Updated the `get_teacher_subject_reports` function to utilize an `INNER JOIN` on the `subject_assignments` table. This strictly restricts faculty to viewing only their assigned subjects, ensuring data privacy and reducing UI clutter.
+    **The "Zero-Session" Visual State**: Implemented a grayed-out "N/A" state for subjects with zero conducted sessions. This prevents the misleading "100% Attendance" bug and utilizes a priority sorting algorithm to float active subjects to the top of the list.
+    **Enrollment Handshake**: Refined the denominator logic to match `profiles.semester` against `subjects.target_semester`. This ensures the "Expected Students" count is 100% accurate regardless of shifting student divisions.
+
+    **UI/UX Refinement & Deep-Dive Details**
+    **Session History Modals**: Integrated a slide-up detail view. Teachers can now click any subject card to view a chronological audit trail of sessions, including "Created At" timestamps (Date/Time) and student presence counts.
+    **Edge-to-Edge "Notch" Design**: Achieved a premium ERP look by making the `StatusBar` translucent. The blue header now "bleeds" behind the system icons (clock/battery), with adjusted `paddingTop` to ensure title alignment on notched devices.
+    **Android Hardware Integration**: Added `BackHandler` listeners to all reporting views and modals. This ensures the physical back button correctly dismisses modals or navigates to the dashboard instead of exiting the application.
 
 ---
 

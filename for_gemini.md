@@ -1,1996 +1,537 @@
-import React, {useState, useEffect} from 'react';
-
-import {
-
-  View,
-
-  Text,
-
-  StyleSheet,
-
-  ScrollView,
-
-  TouchableOpacity,
-
-  Image,
-
-  FlatList,
-
-  StatusBar,
-
-  RefreshControl,
-
-  Alert,
-
-} from 'react-native';
-
-import {
-
-  LayoutDashboard,
-
-  FileText,
-
-  User,
-
-  Clock,
-
-  MapPin,
-
-  Plus,
-
-  LogOut,
-
-  BarChart2,
-
-  Mail,
-
-  Shield,
-
-  BookOpen,
-
-} from 'lucide-react-native';
-
-import {supabase} from './lib/supabase';
-
-
-
-const InfoRow = ({icon: Icon, label, value, isLast = false}: any) => (
-
-  <View>
-
-    <View style={styles.infoRow}>
-
-      <Icon size={20} color="#757575" />
-
-      <View style={{marginLeft: 10}}>
-
-        <Text style={styles.infoLabel}>{label}</Text>
-
-        <Text style={styles.infoValue}>{value}</Text>
-
-      </View>
-
-    </View>
-
-    {!isLast && <View style={styles.infoDivider} />}
-
-  </View>
-
-);
-
-
-
-const getProfileSeed = (teacher: any) => {
-
-  return teacher.email || teacher.id || 'teacher@adsum.com';
-
-};
-
-
-
-export default function TeacherDashboard({
-
-  teacher,
-
-  onNavigate,
-
-  onSelectClass,
-
-}: any) {
-
-  const [profile, setProfile] = useState<any>(null);
-
-  const [activeTab, setActiveTab] = useState('dashboard');
-
-  const [classes, setClasses] = useState<any[]>([]);
-
-  const [loading, setLoading] = useState(true);
-
-  const [assignedSubjects, setAssignedSubjects] = useState<any[]>([]); // For the bottom list
-
-
-
-  const teacherEmailSeed = getProfileSeed(teacher);
-
-
-
-  const fetchClasses = async () => {
-
-    setLoading(true);
-
-
-
-    console.log('🔍 Fetching for Teacher ID:', teacher.id); // DEBUG
-
-
-
-    try {
-
-      const {data: activeSessions, error: sessErr} = await supabase
-
-        .from('sessions')
-
-        .select('*, subjects(*)')
-
-        .eq('teacher_id', teacher.id)
-
-        .eq('is_active', true)
-
-        .order('created_at', {ascending: false});
-
-
-
-      const {data: assignedSubjects, error: subErr} = await supabase
-
-        .from('subjects')
-
-        .select('*')
-
-        .eq('teacher_id', teacher.id);
-
-
-
-      console.log('📚 Assigned Subjects Found:', assignedSubjects?.length);
-
-
-
-      console.log('📡 Live Sessions Found:', activeSessions?.length);
-
-      if (sessErr || subErr) throw sessErr || subErr;
-
-      // if (sessError) throw sessError;
-
-
-
-      setClasses(activeSessions || []);
-
-      setAssignedSubjects(assignedSubjects || []);
-
-    } catch (err) {
-
-      console.error('Fetch failed:', err);
-
-    } finally {
-
-      setLoading(false);
-
-    }
-
-  };
-
-
-
-  useEffect(() => {
-
-    const fetchTeacherProfile = async () => {
-
-      if (!teacher?.id) return; // ✅ Don't fetch if ID is missing yet
-
-
-
-      const {data, error} = await supabase
-
-        .from('profiles')
-
-        .select('name, employee_id, email')
-
-        .eq('id', teacher.id)
-
-        .single();
-
-
-
-      if (error) {
-
-        console.error('Profile fetch error:', error.message);
-
-      } else if (data) {
-
-        setProfile(data);
-
-      }
-
-    };
-
-
-
-    fetchClasses();
-
-    fetchTeacherProfile();
-
-  }, [teacher?.id]); // ✅ Re-run if teacher ID changes/loads
-
-
-
-  const handleLogout = async () => {
-
-    Alert.alert('Sign Out', 'Are you sure you want to log out?', [
-
-      {text: 'Cancel', style: 'cancel'},
-
-      {
-
-        text: 'Log Out',
-
-        style: 'destructive',
-
-        onPress: async () => await supabase.auth.signOut(),
-
-      },
-
-    ]);
-
-  };
-
-
-
-  const handleReportClick = () => {
-
-    Alert.alert(
-
-      'Coming Soon',
-
-      'Detailed analytics and attendance reports will be available in the next update!',
-
-      [{text: 'Okay'}],
-
-    );
-
-  };
-
-
-
-  const getStatusColor = (isActive: boolean) => {
-
-    return isActive
-
-      ? {bg: '#4CAF50', text: '#FFF', label: 'ONGOING'}
-
-      : {bg: '#E0E0E0', text: '#757575', label: 'COMPLETED'};
-
-  };
-
-
-
-  const renderClassItem = ({item}: any) => {
-
-    const status = getStatusColor(item.is_active);
-
-    const displayName =
-
-      item.class_name || item.subjects?.name || 'Untitled Class';
-
-    const displayRoom = item.room_number || 'Room TBD';
-
-    const timeString = new Date(item.created_at).toLocaleTimeString([], {
-
-      hour: '2-digit',
-
-      minute: '2-digit',
-
-    });
-
-
-
-    return (
-
+ return (
       <View style={styles.card}>
-
         <View style={styles.cardHeader}>
-
           <View style={{flex: 1}}>
-
             <Text style={styles.className}>{displayName}</Text>
-
             <Text
-
               style={{
-
                 fontSize: 12,
-
                 fontWeight: 'bold',
-
                 color: item.target_batch === 'ALL' ? '#2196F3' : '#9C27B0',
-
                 marginBottom: 4,
-
               }}>
-
               {item.target_batch === 'ALL'
-
                 ? 'Theory Lecture'
-
                 : `Practical - Batch ${item.target_batch}`}
-
             </Text>
 
-
-
             <View style={styles.metaRow}>
-
               <Clock size={14} color="#757575" />
-
               <Text style={styles.metaText}>{timeString}</Text>
-
             </View>
-
             <View style={styles.metaRow}>
-
-              <Clock size={14} color="#757575" />
-
-              <Text style={styles.metaText}>{timeString}</Text>
-
-            </View>
-
-            <View style={styles.metaRow}>
-
               <MapPin size={14} color="#757575" />
-
               <Text style={styles.metaText}>{displayRoom}</Text>
-
             </View>
-
           </View>
-
           <View style={[styles.statusBadge, {backgroundColor: status.bg}]}>
-
             <Text style={[styles.statusText, {color: status.text}]}>
-
               {status.label}
-
             </Text>
-
           </View>
-
         </View>
-
         <TouchableOpacity
-
           style={[
-
             styles.actionButton,
-
             {
-
               backgroundColor: item.is_active ? '#2196F3' : '#fff',
-
               borderWidth: item.is_active ? 0 : 1,
-
               borderColor: '#E0E0E0',
-
             },
-
           ]}
-
           onPress={() =>
-
             onSelectClass &&
-
             onSelectClass({
-
               id: item.id,
-
               name: displayName,
-
               room: displayRoom,
-
               beacon_id: item.beacon_id,
-
               active_code: item.active_code,
-
               is_active: item.is_active,
-
             })
-
           }>
-
           <Text
-
             style={[
-
               styles.actionButtonText,
-
               {color: item.is_active ? '#FFF' : '#333'},
-
             ]}>
-
             {item.is_active ? 'Manage Session' : 'View Report'}
-
           </Text>
-
         </TouchableOpacity>
-
       </View>
-
     );
-
   };
-
-
 
   const renderContent = () => {
-
     if (activeTab === 'dashboard') {
-
       return (
-
         <>
-
           <View style={styles.header}>
-
             <View style={styles.headerTop}>
-
               <View style={styles.profileRow}>
-
                 <Image
-
                   source={{
-
                     uri: `https://api.dicebear.com/9.x/initials/png?seed=${
-
                       profile?.name || teacher.name || teacher.email
-
                     }&backgroundColor=2196F3&chars=2`,
-
                   }}
-
                   style={styles.avatar}
-
                 />
-
                 <View>
-
                   <Text style={styles.teacherName}>
-
                     {profile?.name || teacher.name}
-
                   </Text>
-
                   <Text style={{color: '#BBDEFB', fontSize: 12}}>
-
                     Teacher Dashboard
-
                   </Text>
-
                 </View>
-
               </View>
-
               <TouchableOpacity
-
                 style={styles.addButton}
-
-                onPress={() => onNavigate && onNavigate('add-class')}>
-
+                onPress={() =>
+                  onNavigate && onNavigate('add-class', {teacherId: teacher.id})
+                }>
                 <Plus color="#2196F3" size={24} />
-
               </TouchableOpacity>
-
             </View>
-
           </View>
-
-
 
           <View style={styles.statsContainer}>
-
             <ScrollView
-
               horizontal
-
               showsHorizontalScrollIndicator={false}
-
               contentContainerStyle={{paddingRight: 20}}>
-
               <View style={styles.statCard}>
-
                 <Text style={styles.statLabel}>Total Classes</Text>
-
                 <Text style={[styles.statValue, {color: '#2196F3'}]}>
-
                   {classes.length}
-
                 </Text>
-
               </View>
-
               <View style={styles.statCard}>
-
                 <Text style={styles.statLabel}>Active Now</Text>
-
                 <Text style={[styles.statValue, {color: '#4CAF50'}]}>
-
                   {classes.filter(c => c.is_active).length}
-
                 </Text>
-
               </View>
-
             </ScrollView>
-
           </View>
-
-
 
           <ScrollView
-
             contentContainerStyle={{flexGrow: 1}} // Allows the content to stretch and scroll
-
-            showsVerticalScrollIndicator={false}>
-
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={['#2196F3']} // Adsum Blue
+              />
+            }>
             <View style={styles.listContainer}>
-
               {/* --- UPPER PART: ONGOING SESSIONS --- */}
-
               <Text style={styles.sectionTitle}>Ongoing Sessions</Text>
-
               <View style={styles.ongoingWrapper}>
-
                 {classes && classes.length > 0 ? (
-
                   classes.map(item => (
-
                     <View key={`ongoing-${item.id}`}>
-
                       {renderClassItem({item})}
-
                     </View>
-
                   ))
-
                 ) : (
-
                   <Text style={styles.emptyText}>
-
                     No sessions active right now.
-
                   </Text>
-
                 )}
-
               </View>
-
-
 
               {/* --- LOWER PART: ASSIGNED SUBJECTS --- */}
-
               <Text style={[styles.sectionTitle, {marginTop: 25}]}>
-
                 Your Assigned Subjects
-
               </Text>
 
-
-
               {/* ✅ Convert FlatList to .map() to fix the scrolling bug */}
-
               <View style={styles.assignedWrapper}>
-
                 {assignedSubjects?.map(item => (
-
                   <TouchableOpacity
-
                     key={`assigned-${item.id}`}
-
                     style={styles.subjectCard}
-
                     onPress={() =>
-
-                      // 🎯 Pass the subject data as an object
-
                       onNavigate &&
-
-                      onNavigate('add-class', {initialSubject: item})
-
+                      onNavigate('add-class', {
+                        initialSubject: item,
+                        teacherId: teacher.id, // 🎯 Also pass it here
+                      })
                     }>
-
                     <View style={styles.subjectIcon}>
-
                       <BookOpen color="#2196F3" size={20} />
-
                     </View>
-
                     <View style={{flex: 1}}>
-
                       <Text style={styles.subjectName}>{item.name}</Text>
-
                       <Text style={styles.subjectMeta}>
-
                         {item.type} • Sem {item.target_semester}
-
                       </Text>
-
                     </View>
-
                     <Plus color="#2196F3" size={20} />
-
                   </TouchableOpacity>
-
                 ))}
-
               </View>
-
-
 
               {/* ✅ Extra space at the bottom to ensure the last item clears the Nav Bar */}
-
               <View style={{height: 120}} />
-
             </View>
-
           </ScrollView>
-
         </>
-
       );
-
     }
-
-
 
     if (activeTab === 'reports') {
-
       return (
-
         <View style={styles.centerContainer}>
-
           <BarChart2 size={60} color="#E0E0E0" />
-
           <Text style={styles.placeholderText}>Reports Coming Soon</Text>
-
           <TouchableOpacity
-
             style={styles.btnOutline}
-
             onPress={handleReportClick}>
-
             <Text style={{color: '#2196F3', fontWeight: 'bold'}}>
-
               Check Details
-
             </Text>
-
           </TouchableOpacity>
-
         </View>
-
       );
-
     }
-
-
 
     if (activeTab === 'profile') {
-
       return (
-
         <ScrollView contentContainerStyle={styles.profileContainer}>
-
           <View style={styles.profileHeader}>
-
             <Image
-
               source={{
-
                 uri: `https://api.dicebear.com/9.x/initials/png?seed=${
-
                   profile?.name || teacher.name
-
                 }&backgroundColor=2196F3&chars=2`,
-
               }}
-
               style={styles.bigAvatar}
-
             />
-
             <Text style={styles.bigName}>
-
               {profile?.name || teacher.name || 'Loading Name...'}
-
             </Text>
-
             <Text style={styles.roleText}>Faculty Member</Text>
-
           </View>
-
-
 
           <View style={styles.infoCard}>
-
             <InfoRow
-
               icon={User}
-
               label="Faculty ID"
-
               value={
-
                 profile?.employee_id ||
-
                 `ID for ${teacher.id.substring(0, 5)}...`
-
               }
-
             />
-
             <InfoRow
-
               icon={Mail}
-
               label="Email Address"
-
               value={profile?.email || teacher.email}
-
             />
-
             <InfoRow
-
               icon={Shield}
-
               label="Designation"
-
               value="Assistant Professor"
-
             />
-
             <InfoRow
-
               icon={BookOpen}
-
               label="Total Sessions"
-
               value={`${classes.length} Classes Created`}
-
               isLast={true}
-
             />
-
           </View>
-
-
 
           <View style={styles.menuSection}>
-
             <TouchableOpacity
-
               style={styles.menuItem}
-
               onPress={handleReportClick}>
-
               <FileText size={20} color="#555" />
-
               <Text style={styles.menuText}>Download Attendance Reports</Text>
-
             </TouchableOpacity>
-
           </View>
-
-
 
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-
             <LogOut size={20} color="#F44336" />
-
             <Text style={styles.logoutText}>Sign Out of Adsum</Text>
-
           </TouchableOpacity>
-
-
 
           <Text style={styles.versionText}>Adsum Faculty v1.0.4</Text>
-
         </ScrollView>
-
       );
-
     }
-
   };
 
-
-
   return (
-
     <View style={styles.container}>
-
       <StatusBar backgroundColor="#2196F3" barStyle="light-content" />
-
       {renderContent()}
 
-
-
       <View style={styles.bottomNav}>
-
         <TouchableOpacity
-
           style={styles.navItem}
-
           onPress={() => setActiveTab('dashboard')}>
-
           <LayoutDashboard
-
             size={24}
-
             color={activeTab === 'dashboard' ? '#2196F3' : '#757575'}
-
           />
-
           <Text
-
             style={[
-
               styles.navText,
-
               activeTab === 'dashboard' && {color: '#2196F3'},
-
             ]}>
-
             Dashboard
-
           </Text>
-
         </TouchableOpacity>
 
-
-
         <TouchableOpacity
-
           style={styles.navItem}
-
           onPress={() => setActiveTab('reports')}>
-
           <FileText
-
             size={24}
-
             color={activeTab === 'reports' ? '#2196F3' : '#757575'}
-
           />
-
           <Text
-
             style={[
-
               styles.navText,
-
               activeTab === 'reports' && {color: '#2196F3'},
-
             ]}>
-
             Reports
-
           </Text>
-
         </TouchableOpacity>
 
-
-
         <TouchableOpacity
-
           style={styles.navItem}
-
           onPress={() => setActiveTab('profile')}>
-
           <User
-
             size={24}
-
             color={activeTab === 'profile' ? '#2196F3' : '#757575'}
-
           />
-
           <Text
-
             style={[
-
               styles.navText,
-
               activeTab === 'profile' && {color: '#2196F3'},
-
             ]}>
-
             Profile
-
           </Text>
-
         </TouchableOpacity>
-
       </View>
-
     </View>
-
-  );
-
-}import React, {useState, useEffect} from 'react';
-
-import {
-
-  View,
-
-  Text,
-
-  StyleSheet,
-
-  ScrollView,
-
-  TouchableOpacity,
-
-  Image,
-
-  FlatList,
-
-  StatusBar,
-
-  RefreshControl,
-
-  Alert,
-
-} from 'react-native';
-
-import {
-
-  LayoutDashboard,
-
-  FileText,
-
-  User,
-
-  Clock,
-
-  MapPin,
-
-  Plus,
-
-  LogOut,
-
-  BarChart2,
-
-  Mail,
-
-  Shield,
-
-  BookOpen,
-
-} from 'lucide-react-native';
-
-import {supabase} from './lib/supabase';
-
-
-
-const InfoRow = ({icon: Icon, label, value, isLast = false}: any) => (
-
-  <View>
-
-    <View style={styles.infoRow}>
-
-      <Icon size={20} color="#757575" />
-
-      <View style={{marginLeft: 10}}>
-
-        <Text style={styles.infoLabel}>{label}</Text>
-
-        <Text style={styles.infoValue}>{value}</Text>
-
-      </View>
-
-    </View>
-
-    {!isLast && <View style={styles.infoDivider} />}
-
-  </View>
-
-);
-
-
-
-const getProfileSeed = (teacher: any) => {
-
-  return teacher.email || teacher.id || 'teacher@adsum.com';
-
-};
-
-
-
-export default function TeacherDashboard({
-
-  teacher,
-
-  onNavigate,
-
-  onSelectClass,
-
-}: any) {
-
-  const [profile, setProfile] = useState<any>(null);
-
-  const [activeTab, setActiveTab] = useState('dashboard');
-
-  const [classes, setClasses] = useState<any[]>([]);
-
-  const [loading, setLoading] = useState(true);
-
-  const [assignedSubjects, setAssignedSubjects] = useState<any[]>([]); // For the bottom list
-
-
-
-  const teacherEmailSeed = getProfileSeed(teacher);
-
-
-
-  const fetchClasses = async () => {
-
-    setLoading(true);
-
-
-
-    console.log('🔍 Fetching for Teacher ID:', teacher.id); // DEBUG
-
-
-
-    try {
-
-      const {data: activeSessions, error: sessErr} = await supabase
-
-        .from('sessions')
-
-        .select('*, subjects(*)')
-
-        .eq('teacher_id', teacher.id)
-
-        .eq('is_active', true)
-
-        .order('created_at', {ascending: false});
-
-
-
-      const {data: assignedSubjects, error: subErr} = await supabase
-
-        .from('subjects')
-
-        .select('*')
-
-        .eq('teacher_id', teacher.id);
-
-
-
-      console.log('📚 Assigned Subjects Found:', assignedSubjects?.length);
-
-
-
-      console.log('📡 Live Sessions Found:', activeSessions?.length);
-
-      if (sessErr || subErr) throw sessErr || subErr;
-
-      // if (sessError) throw sessError;
-
-
-
-      setClasses(activeSessions || []);
-
-      setAssignedSubjects(assignedSubjects || []);
-
-    } catch (err) {
-
-      console.error('Fetch failed:', err);
-
-    } finally {
-
-      setLoading(false);
-
-    }
-
-  };
-
-
-
-  useEffect(() => {
-
-    const fetchTeacherProfile = async () => {
-
-      if (!teacher?.id) return; // ✅ Don't fetch if ID is missing yet
-
-
-
-      const {data, error} = await supabase
-
-        .from('profiles')
-
-        .select('name, employee_id, email')
-
-        .eq('id', teacher.id)
-
-        .single();
-
-
-
-      if (error) {
-
-        console.error('Profile fetch error:', error.message);
-
-      } else if (data) {
-
-        setProfile(data);
-
-      }
-
-    };
-
-
-
-    fetchClasses();
-
-    fetchTeacherProfile();
-
-  }, [teacher?.id]); // ✅ Re-run if teacher ID changes/loads
-
-
-
-  const handleLogout = async () => {
-
-    Alert.alert('Sign Out', 'Are you sure you want to log out?', [
-
-      {text: 'Cancel', style: 'cancel'},
-
-      {
-
-        text: 'Log Out',
-
-        style: 'destructive',
-
-        onPress: async () => await supabase.auth.signOut(),
-
-      },
-
-    ]);
-
-  };
-
-
-
-  const handleReportClick = () => {
-
-    Alert.alert(
-
-      'Coming Soon',
-
-      'Detailed analytics and attendance reports will be available in the next update!',
-
-      [{text: 'Okay'}],
-
-    );
-
-  };
-
-
-
-  const getStatusColor = (isActive: boolean) => {
-
-    return isActive
-
-      ? {bg: '#4CAF50', text: '#FFF', label: 'ONGOING'}
-
-      : {bg: '#E0E0E0', text: '#757575', label: 'COMPLETED'};
-
-  };
-
-
-
-  const renderClassItem = ({item}: any) => {
-
-    const status = getStatusColor(item.is_active);
-
-    const displayName =
-
-      item.class_name || item.subjects?.name || 'Untitled Class';
-
-    const displayRoom = item.room_number || 'Room TBD';
-
-    const timeString = new Date(item.created_at).toLocaleTimeString([], {
-
-      hour: '2-digit',
-
-      minute: '2-digit',
-
-    });
-
-
-
-    return (
-
-      <View style={styles.card}>
-
-        <View style={styles.cardHeader}>
-
-          <View style={{flex: 1}}>
-
-            <Text style={styles.className}>{displayName}</Text>
-
-            <Text
-
-              style={{
-
-                fontSize: 12,
-
-                fontWeight: 'bold',
-
-                color: item.target_batch === 'ALL' ? '#2196F3' : '#9C27B0',
-
-                marginBottom: 4,
-
-              }}>
-
-              {item.target_batch === 'ALL'
-
-                ? 'Theory Lecture'
-
-                : `Practical - Batch ${item.target_batch}`}
-
-            </Text>
-
-
-
-            <View style={styles.metaRow}>
-
-              <Clock size={14} color="#757575" />
-
-              <Text style={styles.metaText}>{timeString}</Text>
-
-            </View>
-
-            <View style={styles.metaRow}>
-
-              <Clock size={14} color="#757575" />
-
-              <Text style={styles.metaText}>{timeString}</Text>
-
-            </View>
-
-            <View style={styles.metaRow}>
-
-              <MapPin size={14} color="#757575" />
-
-              <Text style={styles.metaText}>{displayRoom}</Text>
-
-            </View>
-
-          </View>
-
-          <View style={[styles.statusBadge, {backgroundColor: status.bg}]}>
-
-            <Text style={[styles.statusText, {color: status.text}]}>
-
-              {status.label}
-
-            </Text>
-
-          </View>
-
-        </View>
-
-        <TouchableOpacity
-
-          style={[
-
-            styles.actionButton,
-
-            {
-
-              backgroundColor: item.is_active ? '#2196F3' : '#fff',
-
-              borderWidth: item.is_active ? 0 : 1,
-
-              borderColor: '#E0E0E0',
-
-            },
-
-          ]}
-
-          onPress={() =>
-
-            onSelectClass &&
-
-            onSelectClass({
-
-              id: item.id,
-
-              name: displayName,
-
-              room: displayRoom,
-
-              beacon_id: item.beacon_id,
-
-              active_code: item.active_code,
-
-              is_active: item.is_active,
-
-            })
-
-          }>
-
-          <Text
-
-            style={[
-
-              styles.actionButtonText,
-
-              {color: item.is_active ? '#FFF' : '#333'},
-
-            ]}>
-
-            {item.is_active ? 'Manage Session' : 'View Report'}
-
-          </Text>
-
-        </TouchableOpacity>
-
-      </View>
-
-    );
-
-  };
-
-
-
-  const renderContent = () => {
-
-    if (activeTab === 'dashboard') {
-
-      return (
-
-        <>
-
-          <View style={styles.header}>
-
-            <View style={styles.headerTop}>
-
-              <View style={styles.profileRow}>
-
-                <Image
-
-                  source={{
-
-                    uri: `https://api.dicebear.com/9.x/initials/png?seed=${
-
-                      profile?.name || teacher.name || teacher.email
-
-                    }&backgroundColor=2196F3&chars=2`,
-
-                  }}
-
-                  style={styles.avatar}
-
-                />
-
-                <View>
-
-                  <Text style={styles.teacherName}>
-
-                    {profile?.name || teacher.name}
-
-                  </Text>
-
-                  <Text style={{color: '#BBDEFB', fontSize: 12}}>
-
-                    Teacher Dashboard
-
-                  </Text>
-
-                </View>
-
-              </View>
-
-              <TouchableOpacity
-
-                style={styles.addButton}
-
-                onPress={() => onNavigate && onNavigate('add-class')}>
-
-                <Plus color="#2196F3" size={24} />
-
-              </TouchableOpacity>
-
-            </View>
-
-          </View>
-
-
-
-          <View style={styles.statsContainer}>
-
-            <ScrollView
-
-              horizontal
-
-              showsHorizontalScrollIndicator={false}
-
-              contentContainerStyle={{paddingRight: 20}}>
-
-              <View style={styles.statCard}>
-
-                <Text style={styles.statLabel}>Total Classes</Text>
-
-                <Text style={[styles.statValue, {color: '#2196F3'}]}>
-
-                  {classes.length}
-
-                </Text>
-
-              </View>
-
-              <View style={styles.statCard}>
-
-                <Text style={styles.statLabel}>Active Now</Text>
-
-                <Text style={[styles.statValue, {color: '#4CAF50'}]}>
-
-                  {classes.filter(c => c.is_active).length}
-
-                </Text>
-
-              </View>
-
-            </ScrollView>
-
-          </View>
-
-
-
-          <ScrollView
-
-            contentContainerStyle={{flexGrow: 1}} // Allows the content to stretch and scroll
-
-            showsVerticalScrollIndicator={false}>
-
-            <View style={styles.listContainer}>
-
-              {/* --- UPPER PART: ONGOING SESSIONS --- */}
-
-              <Text style={styles.sectionTitle}>Ongoing Sessions</Text>
-
-              <View style={styles.ongoingWrapper}>
-
-                {classes && classes.length > 0 ? (
-
-                  classes.map(item => (
-
-                    <View key={`ongoing-${item.id}`}>
-
-                      {renderClassItem({item})}
-
-                    </View>
-
-                  ))
-
-                ) : (
-
-                  <Text style={styles.emptyText}>
-
-                    No sessions active right now.
-
-                  </Text>
-
-                )}
-
-              </View>
-
-
-
-              {/* --- LOWER PART: ASSIGNED SUBJECTS --- */}
-
-              <Text style={[styles.sectionTitle, {marginTop: 25}]}>
-
-                Your Assigned Subjects
-
-              </Text>
-
-
-
-              {/* ✅ Convert FlatList to .map() to fix the scrolling bug */}
-
-              <View style={styles.assignedWrapper}>
-
-                {assignedSubjects?.map(item => (
-
-                  <TouchableOpacity
-
-                    key={`assigned-${item.id}`}
-
-                    style={styles.subjectCard}
-
-                    onPress={() =>
-
-                      // 🎯 Pass the subject data as an object
-
-                      onNavigate &&
-
-                      onNavigate('add-class', {initialSubject: item})
-
-                    }>
-
-                    <View style={styles.subjectIcon}>
-
-                      <BookOpen color="#2196F3" size={20} />
-
-                    </View>
-
-                    <View style={{flex: 1}}>
-
-                      <Text style={styles.subjectName}>{item.name}</Text>
-
-                      <Text style={styles.subjectMeta}>
-
-                        {item.type} • Sem {item.target_semester}
-
-                      </Text>
-
-                    </View>
-
-                    <Plus color="#2196F3" size={20} />
-
-                  </TouchableOpacity>
-
-                ))}
-
-              </View>
-
-
-
-              {/* ✅ Extra space at the bottom to ensure the last item clears the Nav Bar */}
-
-              <View style={{height: 120}} />
-
-            </View>
-
-          </ScrollView>
-
-        </>
-
-      );
-
-    }
-
-
-
-    if (activeTab === 'reports') {
-
-      return (
-
-        <View style={styles.centerContainer}>
-
-          <BarChart2 size={60} color="#E0E0E0" />
-
-          <Text style={styles.placeholderText}>Reports Coming Soon</Text>
-
-          <TouchableOpacity
-
-            style={styles.btnOutline}
-
-            onPress={handleReportClick}>
-
-            <Text style={{color: '#2196F3', fontWeight: 'bold'}}>
-
-              Check Details
-
-            </Text>
-
-          </TouchableOpacity>
-
-        </View>
-
-      );
-
-    }
-
-
-
-    if (activeTab === 'profile') {
-
-      return (
-
-        <ScrollView contentContainerStyle={styles.profileContainer}>
-
-          <View style={styles.profileHeader}>
-
-            <Image
-
-              source={{
-
-                uri: `https://api.dicebear.com/9.x/initials/png?seed=${
-
-                  profile?.name || teacher.name
-
-                }&backgroundColor=2196F3&chars=2`,
-
-              }}
-
-              style={styles.bigAvatar}
-
-            />
-
-            <Text style={styles.bigName}>
-
-              {profile?.name || teacher.name || 'Loading Name...'}
-
-            </Text>
-
-            <Text style={styles.roleText}>Faculty Member</Text>
-
-          </View>
-
-
-
-          <View style={styles.infoCard}>
-
-            <InfoRow
-
-              icon={User}
-
-              label="Faculty ID"
-
-              value={
-
-                profile?.employee_id ||
-
-                `ID for ${teacher.id.substring(0, 5)}...`
-
-              }
-
-            />
-
-            <InfoRow
-
-              icon={Mail}
-
-              label="Email Address"
-
-              value={profile?.email || teacher.email}
-
-            />
-
-            <InfoRow
-
-              icon={Shield}
-
-              label="Designation"
-
-              value="Assistant Professor"
-
-            />
-
-            <InfoRow
-
-              icon={BookOpen}
-
-              label="Total Sessions"
-
-              value={`${classes.length} Classes Created`}
-
-              isLast={true}
-
-            />
-
-          </View>
-
-
-
-          <View style={styles.menuSection}>
-
-            <TouchableOpacity
-
-              style={styles.menuItem}
-
-              onPress={handleReportClick}>
-
-              <FileText size={20} color="#555" />
-
-              <Text style={styles.menuText}>Download Attendance Reports</Text>
-
-            </TouchableOpacity>
-
-          </View>
-
-
-
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-
-            <LogOut size={20} color="#F44336" />
-
-            <Text style={styles.logoutText}>Sign Out of Adsum</Text>
-
-          </TouchableOpacity>
-
-
-
-          <Text style={styles.versionText}>Adsum Faculty v1.0.4</Text>
-
-        </ScrollView>
-
-      );
-
-    }
-
-  };
-
-
-
-  return (
-
-    <View style={styles.container}>
-
-      <StatusBar backgroundColor="#2196F3" barStyle="light-content" />
-
-      {renderContent()}
-
-
-
-      <View style={styles.bottomNav}>
-
-        <TouchableOpacity
-
-          style={styles.navItem}
-
-          onPress={() => setActiveTab('dashboard')}>
-
-          <LayoutDashboard
-
-            size={24}
-
-            color={activeTab === 'dashboard' ? '#2196F3' : '#757575'}
-
-          />
-
-          <Text
-
-            style={[
-
-              styles.navText,
-
-              activeTab === 'dashboard' && {color: '#2196F3'},
-
-            ]}>
-
-            Dashboard
-
-          </Text>
-
-        </TouchableOpacity>
-
-
-
-        <TouchableOpacity
-
-          style={styles.navItem}
-
-          onPress={() => setActiveTab('reports')}>
-
-          <FileText
-
-            size={24}
-
-            color={activeTab === 'reports' ? '#2196F3' : '#757575'}
-
-          />
-
-          <Text
-
-            style={[
-
-              styles.navText,
-
-              activeTab === 'reports' && {color: '#2196F3'},
-
-            ]}>
-
-            Reports
-
-          </Text>
-
-        </TouchableOpacity>
-
-
-
-        <TouchableOpacity
-
-          style={styles.navItem}
-
-          onPress={() => setActiveTab('profile')}>
-
-          <User
-
-            size={24}
-
-            color={activeTab === 'profile' ? '#2196F3' : '#757575'}
-
-          />
-
-          <Text
-
-            style={[
-
-              styles.navText,
-
-              activeTab === 'profile' && {color: '#2196F3'},
-
-            ]}>
-
-            Profile
-
-          </Text>
-
-        </TouchableOpacity>
-
-      </View>
-
-    </View>
-
-  );
-
-}
-
-
-import React, {useEffect, useState} from 'react';
-import {View, ActivityIndicator, StyleSheet} from 'react-native';
-import {Session} from '@supabase/supabase-js';
-import {supabase} from './src/lib/supabase';
-
-import Auth from './src/Auth';
-import StudentDashboard from './src/StudentDashboard';
-import TeacherDashboard from './src/TeacherDashboard';
-import StartSession from './src/StartSession';
-import MarkAttendance from './src/MarkAttendance';
-import AddNewClass from './src/AddNewClass';
-import AttendanceHistory from './src/AttendanceHistory';
-import Profile from './src/Profile';
-import ManualOverride from './src/ManualOverride';
-
-export default function App() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [userRole, setUserRole] = useState<'student' | 'teacher' | null>(null);
-
-  const [currentScreen, setCurrentScreen] = useState('dashboard');
-  const [selectedData, setSelectedData] = useState<any>(null);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({data: {session}}) => {
-      checkUserRole(session);
-    });
-
-    const {
-      data: {subscription},
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      checkUserRole(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  // NEW: Fetch Real Role from DB
-  const checkUserRole = async (session: Session | null) => {
-    if (!session) {
-      setSession(null);
-      setUserRole(null);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const {data, error} = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
-        .single();
-
-      if (data) {
-
-        setUserRole(data.role);
-      } else {
-       
-        setUserRole('student');
-      }
-      // if (data) setUserRole(data.role);
-      // else setUserRole('student'); // Default fallback
-
-      setSession(session);
-    } catch (e) {
-      console.error('Role fetch error:', e);
-    } finally {
-      setLoading(false);
-      setCurrentScreen('dashboard'); // Reset nav
-      setSelectedData(null);
-    }
-  };
-
-  if (loading)
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#2196F3" />
-      </View>
-    );
-
-  if (!session) return <Auth />;
-
-  // helper to go back home
-  const goHome = () => {
-    setCurrentScreen('dashboard');
-    setSelectedData(null);
-  };
-
-  // --- TEACHER FLOW ---
-  if (userRole === 'teacher') {
-    if (currentScreen === 'add-class')
-      return <AddNewClass onBack={goHome} onClassCreated={goHome} />;
-
-    if (currentScreen === 'start-session' && selectedData) {
-      return <StartSession classSession={selectedData} onBack={goHome} />;
-    }
-
-    if (currentScreen === 'profile')
-      return <Profile session={session} role="Faculty" onBack={goHome} />;
-
-    return (
-      <TeacherDashboard
-        teacher={{
-          id: session.user.id, // ✅ CRITICAL: Add this line!
-          name:
-            session.user.user_metadata?.name || "Faculty Member",
-          email: session.user.email,
-        }}
-        onNavigate={setCurrentScreen}
-        onSelectClass={(data: any) => {
-          setSelectedData(data);
-          setCurrentScreen('start-session');
-        }}
-      />
-    );
-  }
-
-  // --- STUDENT FLOW ---
-  if (currentScreen === 'mark-attendance' && selectedData) {
-    return (
-      <MarkAttendance
-        classSession={selectedData}
-        onBack={goHome}
-        onSuccess={goHome}
-      />
-    );
-  }
-  if (currentScreen === 'history') return <AttendanceHistory onBack={goHome} />;
-  if (currentScreen === 'profile')
-    return <Profile session={session} role="Student" onBack={goHome} />;
-
-  return (
-    <StudentDashboard
-      session={session}
-      onNavigate={(screen: string, data: any) => {
-        if (data) setSelectedData(data);
-        setCurrentScreen(screen);
-      }}
-    />
   );
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, justifyContent: 'center', alignItems: 'center'},
+  container: {flex: 1, backgroundColor: '#F5F5F5'},
+  header: {
+    backgroundColor: '#2196F3',
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    elevation: 5,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  headerTitle: {
+    color: '#FFF',
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginTop: 5,
+  },
+  profileRow: {flexDirection: 'row', alignItems: 'center', gap: 12},
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#E1E1E1',
+  },
+  teacherName: {color: '#FFF', fontSize: 18, fontWeight: 'bold'},
+  addButton: {backgroundColor: '#FFF', padding: 8, borderRadius: 20},
+  statsContainer: {marginTop: -25, paddingHorizontal: 15},
+  statCard: {
+    backgroundColor: '#FFF',
+    padding: 15,
+    borderRadius: 12,
+    marginRight: 12,
+    minWidth: 130,
+    elevation: 3,
+  },
+  statLabel: {color: '#757575', fontSize: 12, marginBottom: 5},
+  statValue: {fontSize: 24, fontWeight: 'bold'},
+  listContainer: {flex: 1, padding: 20, marginTop: -10},
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#212121',
+    marginBottom: 15,
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: '#999',
+    marginTop: 20,
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
+  ongoingWrapper: {
+    marginBottom: 10,
+  },
+  assignedWrapper: {
+    marginTop: 10,
+    paddingVertical: 5,
+  },
+  subjectCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    elevation: 2,
+    borderLeftWidth: 4,
+    borderLeftColor: '#2196F3',
+    width: '100%', // Highlights it's a "create" action
+  },
+  subjectIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E3F2FD',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  subjectName: {fontSize: 16, fontWeight: 'bold', color: '#333'},
+  subjectMeta: {fontSize: 12, color: '#757575', marginTop: 2},
+  card: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 15,
+    elevation: 2,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 15,
+  },
+  className: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#212121',
+    marginBottom: 5,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 5,
+    gap: 4,
+  },
+  metaText: {color: '#757575', fontSize: 13},
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    height: 24,
+    justifyContent: 'center',
+  },
+  statusText: {fontSize: 10, fontWeight: 'bold'},
+  actionButton: {padding: 12, borderRadius: 8, alignItems: 'center'},
+  actionButtonText: {fontWeight: 'bold', fontSize: 14},
+  bottomNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    padding: 12,
+    backgroundColor: '#FFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+    position: 'absolute',
+    bottom: 0,
+    width: '100%',
+  },
+  navItem: {alignItems: 'center'},
+  navText: {fontSize: 12, color: '#757575', marginTop: 4},
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom: 50,
+  },
+  placeholderText: {
+    fontSize: 18,
+    color: '#999',
+    marginTop: 15,
+    marginBottom: 20,
+  },
+  btnOutline: {
+    borderWidth: 1,
+    borderColor: '#2196F3',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  profileContainer: {padding: 20, paddingBottom: 100},
+  profileHeader: {alignItems: 'center', marginTop: 20, marginBottom: 40},
+  bigAvatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 4,
+    borderColor: '#FFF',
+    marginBottom: 15,
+  },
+  bigName: {fontSize: 24, fontWeight: 'bold', color: '#333'},
+  roleText: {fontSize: 16, color: '#757575'},
+  menuSection: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 20,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  menuText: {fontSize: 16, marginLeft: 15, color: '#333'},
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFEBEE',
+    padding: 15,
+    borderRadius: 12,
+  },
+  logoutText: {
+    color: '#F44336',
+    fontWeight: 'bold',
+    marginLeft: 10,
+    fontSize: 16,
+  },
+  versionText: {textAlign: 'center', color: '#BBB', marginTop: 20},
+  infoCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    elevation: 2,
+    marginBottom: 25,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    gap: 15,
+  },
+  infoDivider: {height: 1, backgroundColor: '#EEE'},
+  infoLabel: {fontSize: 12, color: '#757575'}, // ✅ Added missing style
+  infoValue: {fontSize: 16, color: '#212121', fontWeight: '600'}, // ✅ Added missing style
 });

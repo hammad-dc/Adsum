@@ -138,11 +138,8 @@ export default function TeacherDashboard({
   };
 
   const handleReportClick = () => {
-    Alert.alert(
-      'Coming Soon',
-      'Detailed analytics and attendance reports will be available in the next update!',
-      [{text: 'Okay'}],
-    );
+    // Directly trigger the standardized navigation key[cite: 2]
+    onNavigate && onNavigate('academic-reports');
   };
 
   const getStatusColor = (isActive: boolean) => {
@@ -346,22 +343,6 @@ export default function TeacherDashboard({
       );
     }
 
-    if (activeTab === 'reports') {
-      return (
-        <View style={styles.centerContainer}>
-          <BarChart2 size={60} color="#E0E0E0" />
-          <Text style={styles.placeholderText}>Reports Coming Soon</Text>
-          <TouchableOpacity
-            style={styles.btnOutline}
-            onPress={handleReportClick}>
-            <Text style={{color: '#2196F3', fontWeight: 'bold'}}>
-              Check Details
-            </Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-
     if (activeTab === 'profile') {
       return (
         <ScrollView contentContainerStyle={styles.profileContainer}>
@@ -411,8 +392,9 @@ export default function TeacherDashboard({
             <TouchableOpacity
               style={styles.menuItem}
               onPress={handleReportClick}>
+              
               <FileText size={20} color="#555" />
-              <Text style={styles.menuText}>Download Attendance Reports</Text>
+              <Text style={styles.menuText}>Academic Reports</Text>
             </TouchableOpacity>
           </View>
 
@@ -449,20 +431,9 @@ export default function TeacherDashboard({
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => setActiveTab('reports')}>
-          <FileText
-            size={24}
-            color={activeTab === 'reports' ? '#2196F3' : '#757575'}
-          />
-          <Text
-            style={[
-              styles.navText,
-              activeTab === 'reports' && {color: '#2196F3'},
-            ]}>
-            Reports
-          </Text>
+        <TouchableOpacity style={styles.navItem} onPress={handleReportClick}>
+          <FileText size={24} color="#757575" />
+          <Text style={styles.navText}>Reports</Text>
         </TouchableOpacity>
 
         <TouchableOpacity

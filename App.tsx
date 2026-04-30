@@ -12,6 +12,7 @@ import AddNewClass from './src/AddNewClass';
 import AttendanceHistory from './src/AttendanceHistory';
 import Profile from './src/Profile';
 import ManualOverride from './src/ManualOverride';
+import AcademicReports from './src/AcademicReport';
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -86,6 +87,9 @@ export default function App() {
 
   // --- TEACHER FLOW ---
   if (userRole === 'teacher') {
+    if (currentScreen === 'academic-reports') {
+      return <AcademicReports teacherId={session.user.id} onBack={goHome} />;
+    }
     if (currentScreen === 'add-class')
       return (
         <AddNewClass

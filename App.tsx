@@ -18,9 +18,9 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<'student' | 'teacher' | null>(null);
-
-  const [currentScreen, setCurrentScreen] = useState('dashboard');
+  const [currentScreen, setCurrentScreen] = useState<string | null>(null);
   const [selectedData, setSelectedData] = useState<any>(null);
+  const [dashboardTab, setDashboardTab] = useState('dashboard');
 
   useEffect(() => {
     supabase.auth.getSession().then(({data: {session}}) => {
@@ -87,8 +87,18 @@ export default function App() {
 
   // --- TEACHER FLOW ---
   if (userRole === 'teacher') {
+    const handleReportBack = (targetTab: string = 'dashboard') => {
+      setDashboardTab(targetTab); // 🎯 Sets the state for the dashboard
+      setCurrentScreen(null); // Swaps back to TeacherDashboard
+    };
+
     if (currentScreen === 'academic-reports') {
-      return <AcademicReports teacherId={session.user.id} onBack={goHome} />;
+      return (
+        <AcademicReports
+          teacherId={session.user.id}
+          onBack={handleReportBack}
+        />
+      );
     }
     if (currentScreen === 'add-class')
       return (
@@ -111,6 +121,7 @@ export default function App() {
 
     return (
       <TeacherDashboard
+        initialTab={dashboardTab}
         teacher={{
           id: session.user.id, // ✅ CRITICAL: Add this line!
           name: session.user.user_metadata?.name || 'Faculty Member',

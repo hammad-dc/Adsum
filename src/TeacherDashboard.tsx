@@ -47,20 +47,30 @@ export default function TeacherDashboard({
   teacher,
   onNavigate,
   onSelectClass,
+  initialTab,
 }: any) {
   const [profile, setProfile] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(initialTab || 'dashboard');
   const [classes, setClasses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [assignedSubjects, setAssignedSubjects] = useState<any[]>([]); // For the bottom list
 
   const teacherEmailSeed = getProfileSeed(teacher);
+  const [totalSessions, setTotalSessions] = useState(0);
 
   const fetchClasses = async () => {
     setLoading(true);
     try {
-      // 1. Fetch active sessions (Ongoing)
+      const {count: historyCount, error: countErr} = await supabase
+        .from('sessions')
+        .select('*', {count: 'exact', head: true}) 
+        .eq('teacher_id', teacher.id); 
+
+      if (countErr) throw countErr;
+      setTotalSessions(historyCount || 0);
+
+      // Fetch active sessions (Ongoing)
       const {data: activeSessions} = await supabase
         .from('sessions')
         .select('*, subjects(*)')
@@ -110,9 +120,13 @@ export default function TeacherDashboard({
     }
   };
   useEffect(() => {
-    fetchClasses();
-    fetchTeacherProfile();
-  }, [teacher?.id]); // ✅ Re-run if teacher ID changes/loads
+    if (initialTab) setActiveTab(initialTab);
+
+    if (teacher?.id) {
+      fetchClasses();
+      fetchTeacherProfile();
+    }
+  }, [teacher?.id, initialTab]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -264,7 +278,7 @@ export default function TeacherDashboard({
               <View style={styles.statCard}>
                 <Text style={styles.statLabel}>Total Classes</Text>
                 <Text style={[styles.statValue, {color: '#2196F3'}]}>
-                  {classes.length}
+                  {totalSessions}
                 </Text>
               </View>
               <View style={styles.statCard}>
@@ -392,7 +406,6 @@ export default function TeacherDashboard({
             <TouchableOpacity
               style={styles.menuItem}
               onPress={handleReportClick}>
-              
               <FileText size={20} color="#555" />
               <Text style={styles.menuText}>Academic Reports</Text>
             </TouchableOpacity>

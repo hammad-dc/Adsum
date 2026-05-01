@@ -78,7 +78,7 @@ export default function AcademicReports({teacherId, onBack}: any) {
         .from('sessions')
         .select(
           `
-          id, created_at, target_batch, 
+          id, created_at,closed_at, target_batch, 
           attendance(count)
         `,
         )
@@ -195,7 +195,7 @@ export default function AcademicReports({teacherId, onBack}: any) {
         barStyle="light-content"
       />
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack}>
+        <TouchableOpacity onPress={() => onBack('dashboard')}>
           <ArrowLeft color="#FFF" size={24} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Academic Reports</Text>
@@ -238,15 +238,15 @@ export default function AcademicReports({teacherId, onBack}: any) {
               ) : (
                 sessionHistory.map((session, index) => (
                   <View key={session.id} style={styles.sessionRow}>
-                    <View>
+                    <View style={{marginBottom: 2}}>
                       <Text
                         style={{
                           fontSize: 10,
                           fontWeight: 'bold',
                           color: '#999',
-                          marginBottom: 2,
+                          textTransform: 'uppercase',
                         }}>
-                        CREATED AT
+                        Session Timing
                       </Text>
                       <View style={styles.sessionDateBox}>
                         <Calendar size={14} color="#757575" />
@@ -261,10 +261,18 @@ export default function AcademicReports({teacherId, onBack}: any) {
                             color: '#757575',
                             marginLeft: 8,
                           }}>
+                          {/* 🎯 Displays "Start Time - End Time" */}
                           {new Date(session.created_at).toLocaleTimeString([], {
                             hour: '2-digit',
                             minute: '2-digit',
                           })}
+                          {' - '}
+                          {session.closed_at
+                            ? new Date(session.closed_at).toLocaleTimeString(
+                                [],
+                                {hour: '2-digit', minute: '2-digit'},
+                              )
+                            : 'N/A'}
                         </Text>
                       </View>
                     </View>
@@ -291,7 +299,9 @@ export default function AcademicReports({teacherId, onBack}: any) {
       </Modal>
       {/* 🎯 Standard Bottom Navigation */}
       <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem} onPress={onBack}>
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => onBack('dashboard')}>
           <LayoutDashboard size={24} color="#757575" />
           <Text style={styles.navText}>Dashboard</Text>
         </TouchableOpacity>
@@ -301,7 +311,9 @@ export default function AcademicReports({teacherId, onBack}: any) {
           <Text style={[styles.navText, {color: '#2196F3'}]}>Reports</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem} onPress={onBack}>
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => onBack('profile')}>
           <User size={24} color="#757575" />
           <Text style={styles.navText}>Profile</Text>
         </TouchableOpacity>

@@ -356,7 +356,9 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
           await stopBroadcast();
           await supabase
             .from('sessions')
-            .update({is_active: false})
+            .update({is_active: false,
+              closed_at: new Date().toISOString() // records the current date
+            })
             .eq('id', classSession.id);
           onBack();
         },

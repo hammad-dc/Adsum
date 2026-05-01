@@ -44,7 +44,7 @@ export default function AddNewClass({onBack, onClassCreated, params}: any) {
   useEffect(() => {
     const backAction = () => {
       if (onBack) {
-        onBack(); // Run the back navigation prop passed from the parent
+        onBack('dashboard'); // Run the back navigation prop passed from the parent
         return true; // "true" means: I handled it, don't close the app.
       }
       return false; // "false" means: I didn't handle it, let the OS decide.

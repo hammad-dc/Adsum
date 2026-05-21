@@ -1,321 +1,365 @@
- return (
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <View style={{flex: 1}}>
-            <Text style={styles.className}>{displayName}</Text>
-            <Text
-              style={{
-                fontSize: 12,
-                fontWeight: 'bold',
-                color: item.target_batch === 'ALL' ? '#2196F3' : '#9C27B0',
-                marginBottom: 4,
-              }}>
-              {item.target_batch === 'ALL'
-                ? 'Theory Lecture'
-                : `Practical - Batch ${item.target_batch}`}
-            </Text>
+import React, {useState, useEffect} from 'react';
+import Geolocation from 'react-native-geolocation-service';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  Switch,
+  Alert,
+  ActivityIndicator,
+  PermissionsAndroid, // 👈 ADD THIS
+  Platform,
+  BackHandler,
+} from 'react-native';
+import {ArrowLeft, Calendar, MapPin, BookOpen} from 'lucide-react-native';
+import {supabase} from './lib/supabase';
 
-            <View style={styles.metaRow}>
-              <Clock size={14} color="#757575" />
-              <Text style={styles.metaText}>{timeString}</Text>
-            </View>
-            <View style={styles.metaRow}>
-              <MapPin size={14} color="#757575" />
-              <Text style={styles.metaText}>{displayRoom}</Text>
-            </View>
-          </View>
-          <View style={[styles.statusBadge, {backgroundColor: status.bg}]}>
-            <Text style={[styles.statusText, {color: status.text}]}>
-              {status.label}
-            </Text>
-          </View>
-        </View>
-        <TouchableOpacity
-          style={[
-            styles.actionButton,
-            {
-              backgroundColor: item.is_active ? '#2196F3' : '#fff',
-              borderWidth: item.is_active ? 0 : 1,
-              borderColor: '#E0E0E0',
-            },
-          ]}
-          onPress={() =>
-            onSelectClass &&
-            onSelectClass({
-              id: item.id,
-              name: displayName,
-              room: displayRoom,
-              beacon_id: item.beacon_id,
-              active_code: item.active_code,
-              is_active: item.is_active,
-            })
-          }>
-          <Text
-            style={[
-              styles.actionButtonText,
-              {color: item.is_active ? '#FFF' : '#333'},
-            ]}>
-            {item.is_active ? 'Manage Session' : 'View Report'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+export default function AddNewClass({onBack, onClassCreated, params}: any) {
+  const [isAdHoc, setIsAdHoc] = useState(true);
+  const [loading, setLoading] = useState(false);
+
+  // ✅ FIX: Pre-filled with defaults so chips appear INSTANTLY
+  const [savedSubjects, setSavedSubjects] = useState<any[]>([
+    {id: 991, name: 'DSGT', code: 'CS301'},
+    {id: 992, name: 'DLCA', code: 'CS302'},
+    {id: 993, name: 'Data Structures', code: 'CS303'},
+    {id: 994, name: 'Computer Graphics', code: 'CS304'},
+  ]);
+
+  const [subjectName, setSubjectName] = useState('');
+  const [room, setRoom] = useState('');
+  const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(
+    null,
+  );
+  const [targetCourse, setTargetCourse] = useState('Computer Engineering');
+  const [targetYear, setTargetYear] = useState('SE'); // FE, SE, TE, BE
+  const [targetSemester, setTargetSemester] = useState(4);
+  const [selectedBatch, setSelectedBatch] = useState('ALL'); // ALL, A, B, or C
+  const [subjects, setSubjects] = useState<any[]>([]);
+
+  const teacherId = params?.teacherId;
+  useEffect(() => {
+    const backAction = () => {
+      if (onBack) {
+        onBack('dashboard'); // Run the back navigation prop passed from the parent
+        return true; // "true" means: I handled it, don't close the app.
+      }
+      return false; // "false" means: I didn't handle it, let the OS decide.
+    };
+
+    // 2. Register the listener
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction,
     );
+    fetchMySubjects();
+    return () => backHandler.remove();
+  }, [onBack, teacherId]);
+
+  const fetchMySubjects = async () => {
+    if (!teacherId) return; // 🎯 Safety check
+    try {
+      // 🎯 JOIN logic: Get subjects THROUGH the assignment bridge
+      const {data, error} = await supabase
+        .from('subject_assignments')
+        .select(
+          `
+        subjects (
+          id, name, code, target_course, target_year, target_semester, type
+        )
+      `,
+        )
+        .eq('teacher_id', params?.teacherId || teacherId); // Ensure you pass teacherId in props
+
+      if (error) throw error;
+
+      // Transform joined data: [{subjects: {...}}, {subjects: {...}}] -> [{...}, {...}]
+      const mappedData = data?.map(item => item.subjects).filter(Boolean) || [];
+
+      setSubjects(mappedData);
+    } catch (err) {
+      console.error('Error fetching assigned subjects:', err);
+    }
   };
 
-  const renderContent = () => {
-    if (activeTab === 'dashboard') {
-      return (
-        <>
-          <View style={styles.header}>
-            <View style={styles.headerTop}>
-              <View style={styles.profileRow}>
-                <Image
-                  source={{
-                    uri: `https://api.dicebear.com/9.x/initials/png?seed=${
-                      profile?.name || teacher.name || teacher.email
-                    }&backgroundColor=2196F3&chars=2`,
-                  }}
-                  style={styles.avatar}
-                />
-                <View>
-                  <Text style={styles.teacherName}>
-                    {profile?.name || teacher.name}
-                  </Text>
-                  <Text style={{color: '#BBDEFB', fontSize: 12}}>
-                    Teacher Dashboard
-                  </Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                style={styles.addButton}
-                onPress={() =>
-                  onNavigate && onNavigate('add-class', {teacherId: teacher.id})
-                }>
-                <Plus color="#2196F3" size={24} />
-              </TouchableOpacity>
-            </View>
-          </View>
+  useEffect(() => {
+    if (params?.initialSubject) {
+      console.log('Auto-filling subject:', params.initialSubject.name);
+      selectSubject(params.initialSubject); // This fills all the fields for you
+    }
+  }, [params]);
 
-          <View style={styles.statsContainer}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{paddingRight: 20}}>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>Total Classes</Text>
-                <Text style={[styles.statValue, {color: '#2196F3'}]}>
-                  {classes.length}
-                </Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>Active Now</Text>
-                <Text style={[styles.statValue, {color: '#4CAF50'}]}>
-                  {classes.filter(c => c.is_active).length}
-                </Text>
-              </View>
-            </ScrollView>
-          </View>
+  const selectSubject = (subject: any) => {
+    setSubjectName(subject.name);
+    setSelectedSubjectId(subject.id);
 
-          <ScrollView
-            contentContainerStyle={{flexGrow: 1}} // Allows the content to stretch and scroll
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                colors={['#2196F3']} // Adsum Blue
-              />
-            }>
-            <View style={styles.listContainer}>
-              {/* --- UPPER PART: ONGOING SESSIONS --- */}
-              <Text style={styles.sectionTitle}>Ongoing Sessions</Text>
-              <View style={styles.ongoingWrapper}>
-                {classes && classes.length > 0 ? (
-                  classes.map(item => (
-                    <View key={`ongoing-${item.id}`}>
-                      {renderClassItem({item})}
-                    </View>
-                  ))
-                ) : (
-                  <Text style={styles.emptyText}>
-                    No sessions active right now.
-                  </Text>
-                )}
-              </View>
+    if (subject.target_course) setTargetCourse(subject.target_course);
+    if (subject.target_year) setTargetYear(subject.target_year);
+    if (subject.target_semester) setTargetSemester(subject.target_semester);
 
-              {/* --- LOWER PART: ASSIGNED SUBJECTS --- */}
-              <Text style={[styles.sectionTitle, {marginTop: 25}]}>
-                Your Assigned Subjects
-              </Text>
+    const isPractical =
+      subject.type === 'Lab' || subject.name.toLowerCase().includes('lab');
 
-              {/* ✅ Convert FlatList to .map() to fix the scrolling bug */}
-              <View style={styles.assignedWrapper}>
-                {assignedSubjects?.map(item => (
-                  <TouchableOpacity
-                    key={`assigned-${item.id}`}
-                    style={styles.subjectCard}
-                    onPress={() =>
-                      onNavigate &&
-                      onNavigate('add-class', {
-                        initialSubject: item,
-                        teacherId: teacher.id, // 🎯 Also pass it here
-                      })
-                    }>
-                    <View style={styles.subjectIcon}>
-                      <BookOpen color="#2196F3" size={20} />
-                    </View>
-                    <View style={{flex: 1}}>
-                      <Text style={styles.subjectName}>{item.name}</Text>
-                      <Text style={styles.subjectMeta}>
-                        {item.type} • Sem {item.target_semester}
-                      </Text>
-                    </View>
-                    <Plus color="#2196F3" size={20} />
-                  </TouchableOpacity>
-                ))}
-              </View>
+    if (isPractical) {
+      setRoom(subject.default_room || 'Lab 1');
+      setSelectedBatch('A'); // Default to first batch for Labs
+    } else {
+      setRoom(subject.default_room || 'Room 304');
+      setSelectedBatch('ALL'); // Force 'ALL' for Theory
+    }
+  };
 
-              {/* ✅ Extra space at the bottom to ensure the last item clears the Nav Bar */}
-              <View style={{height: 120}} />
-            </View>
-          </ScrollView>
-        </>
+  const handleSubmit = async () => {
+    if (!subjectName || !room) {
+      Alert.alert(
+        'Missing Fields',
+        'Please select a subject or type a name and room.',
       );
+      return;
     }
 
-    if (activeTab === 'reports') {
-      return (
-        <View style={styles.centerContainer}>
-          <BarChart2 size={60} color="#E0E0E0" />
-          <Text style={styles.placeholderText}>Reports Coming Soon</Text>
-          <TouchableOpacity
-            style={styles.btnOutline}
-            onPress={handleReportClick}>
-            <Text style={{color: '#2196F3', fontWeight: 'bold'}}>
-              Check Details
-            </Text>
-          </TouchableOpacity>
-        </View>
-      );
+    setLoading(true);
+    let isPermissionGranted = false;
+    try {
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: 'Adsum Geofence Access',
+            message:
+              'Adsum needs access to your GPS location to verify you are starting the session from the correct classroom. This prevents proxy attendance.',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          },
+        );
+
+        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+          isPermissionGranted = true;
+        } else if (granted === PermissionsAndroid.RESULTS.DENIED) {
+        } else if (granted === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+          Alert.alert(
+            'Permission Required',
+            'You have denied location access permanently. Please go to your phone settings and enable Location permissions manually for Adsum.',
+          );
+        }
+      } else {
+        // Handle iOS if needed later
+        isPermissionGranted = true;
+      }
+    } catch (err) {
+      console.warn(err);
     }
 
-    if (activeTab === 'profile') {
-      return (
-        <ScrollView contentContainerStyle={styles.profileContainer}>
-          <View style={styles.profileHeader}>
-            <Image
-              source={{
-                uri: `https://api.dicebear.com/9.x/initials/png?seed=${
-                  profile?.name || teacher.name
-                }&backgroundColor=2196F3&chars=2`,
-              }}
-              style={styles.bigAvatar}
-            />
-            <Text style={styles.bigName}>
-              {profile?.name || teacher.name || 'Loading Name...'}
-            </Text>
-            <Text style={styles.roleText}>Faculty Member</Text>
-          </View>
-
-          <View style={styles.infoCard}>
-            <InfoRow
-              icon={User}
-              label="Faculty ID"
-              value={
-                profile?.employee_id ||
-                `ID for ${teacher.id.substring(0, 5)}...`
-              }
-            />
-            <InfoRow
-              icon={Mail}
-              label="Email Address"
-              value={profile?.email || teacher.email}
-            />
-            <InfoRow
-              icon={Shield}
-              label="Designation"
-              value="Assistant Professor"
-            />
-            <InfoRow
-              icon={BookOpen}
-              label="Total Sessions"
-              value={`${classes.length} Classes Created`}
-              isLast={true}
-            />
-          </View>
-
-          <View style={styles.menuSection}>
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={handleReportClick}>
-              <FileText size={20} color="#555" />
-              <Text style={styles.menuText}>Download Attendance Reports</Text>
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <LogOut size={20} color="#F44336" />
-            <Text style={styles.logoutText}>Sign Out of Adsum</Text>
-          </TouchableOpacity>
-
-          <Text style={styles.versionText}>Adsum Faculty v1.0.4</Text>
-        </ScrollView>
-      );
+    // Stop if permission was not granted
+    if (!isPermissionGranted) {
+      setLoading(false);
+      return; // 🛑 Halt flow
     }
+
+    // 1. Get current GPS coordinates first
+    Geolocation.getCurrentPosition(
+      async position => {
+        const {latitude, longitude} = position.coords;
+
+        try {
+          const {
+            data: {user},
+          } = await supabase.auth.getUser();
+          const newBeaconId = `BEACON-${Math.floor(Math.random() * 10000)}`;
+          const initialCode = Math.floor(
+            1000 + Math.random() * 9000,
+          ).toString();
+
+          // 2. Insert into Supabase WITH the coordinates
+          const {data, error} = await supabase
+            .from('sessions')
+            .insert({
+              class_name: subjectName,
+              room_number: room,
+              teacher_id: user?.id,
+              subject_id:
+                selectedSubjectId && selectedSubjectId < 900
+                  ? selectedSubjectId
+                  : null,
+              target_course: targetCourse,
+              target_year: targetYear,
+              target_semester: targetSemester,
+              target_batch: selectedBatch,
+              beacon_id: newBeaconId,
+              active_code: initialCode,
+              is_active: false,
+              timer_state: 'PAUSED',
+              frozen_seconds: 120, 
+              expires_at: null,
+              gps_lat: latitude, 
+              gps_long: longitude, 
+            })
+            .select()
+            .single();
+
+          if (error) throw error;
+
+          if (onClassCreated) {
+            onClassCreated({
+              ...data,
+              class_name: subjectName,
+              room_number: room,
+            });
+          }
+          onBack();
+        } catch (err: any) {
+          Alert.alert('Database Error', err.message);
+        } finally {
+          setLoading(false);
+        }
+      },
+      error => {
+        setLoading(false);
+        Alert.alert(
+          'GPS Error',
+          'Could not get your location. Please check if GPS is on.',
+        );
+        console.error(error);
+      },
+      {enableHighAccuracy: true, timeout: 15000, maximumAge: 10000},
+    );
   };
 
   return (
     <View style={styles.container}>
-      <StatusBar backgroundColor="#2196F3" barStyle="light-content" />
-      {renderContent()}
-
-      <View style={styles.bottomNav}>
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => setActiveTab('dashboard')}>
-          <LayoutDashboard
-            size={24}
-            color={activeTab === 'dashboard' ? '#2196F3' : '#757575'}
-          />
-          <Text
-            style={[
-              styles.navText,
-              activeTab === 'dashboard' && {color: '#2196F3'},
-            ]}>
-            Dashboard
-          </Text>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={onBack}>
+          <ArrowLeft color="#FFF" size={24} />
         </TouchableOpacity>
+        <Text style={styles.headerTitle}>Start Class</Text>
+      </View>
 
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => setActiveTab('reports')}>
-          <FileText
-            size={24}
-            color={activeTab === 'reports' ? '#2196F3' : '#757575'}
-          />
-          <Text
-            style={[
-              styles.navText,
-              activeTab === 'reports' && {color: '#2196F3'},
-            ]}>
-            Reports
-          </Text>
-        </TouchableOpacity>
+      <ScrollView style={styles.content}>
+        {/* <View style={styles.card}>
+          <View style={styles.rowBetween}>
+            <View>
+              <Text style={styles.label}>Instant Mode</Text>
+              <Text style={styles.subLabel}>Broadcast immediately</Text>
+            </View>
+            <Switch
+              value={isAdHoc}
+              onValueChange={setIsAdHoc}
+              trackColor={{false: '#E0E0E0', true: '#90CAF9'}}
+              thumbColor={isAdHoc ? '#2196F3' : '#f4f3f4'}
+            />
+          </View>
+        </View> */}
 
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => setActiveTab('profile')}>
-          <User
-            size={24}
-            color={activeTab === 'profile' ? '#2196F3' : '#757575'}
-          />
-          <Text
-            style={[
-              styles.navText,
-              activeTab === 'profile' && {color: '#2196F3'},
-            ]}>
-            Profile
+        {/* ✅ FIX: Quick Select is BACK and visible immediately */}
+        <View style={styles.quickSelectContainer}>
+          <Text style={styles.sectionHeader}>
+            Quick Select Assigned Subject
           </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.quickSelectScroll}>
+            {subjects.length > 0 ? (
+              subjects.map(sub => (
+                <TouchableOpacity
+                  key={sub.id}
+                  style={[
+                    styles.subjectChip,
+                    selectedSubjectId === sub.id && styles.subjectChipActive,
+                  ]}
+                  onPress={() => selectSubject(sub)}>
+                  <Text
+                    style={[
+                      styles.chipText,
+                      selectedSubjectId === sub.id && styles.chipTextActive,
+                    ]}>
+                    {sub.code} {/* 🎯 Use Code (e.g. CSC402) for the chip UI */}
+                  </Text>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <Text style={styles.emptyText}>No subjects assigned to you.</Text>
+            )}
+          </ScrollView>
+        </View>
+
+        {/* --- 🎯 TARGET AUDIENCE SECTION --- */}
+        <View style={styles.card}>
+          <Text style={styles.sectionHeader}>Target Students</Text>
+
+          {/* 🎯 Only show Batch Selection if it's NOT a Theory lecture */}
+          {selectedBatch !== 'ALL' ? (
+            <View style={styles.rowBetween}>
+              <Text style={styles.label}>Batch Selection: </Text>
+              <View style={styles.batchContainer}>
+                {['A', 'B', 'C'].map(b => (
+                  <TouchableOpacity
+                    key={b}
+                    onPress={() => setSelectedBatch(b)}
+                    style={[
+                      styles.miniChip,
+                      selectedBatch === b && styles.miniChipActive,
+                    ]}>
+                    <Text
+                      style={[
+                        styles.miniChipText,
+                        selectedBatch === b && styles.miniChipTextActive,
+                      ]}>
+                      {b}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          ) : (
+            <View style={styles.theoryLockBox}>
+              <BookOpen size={16} color="#4CAF50" />
+              <Text style={styles.theoryLockText}>
+                Full Class (Theory) - No Batch Selection Required
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.inputLabel}>Subject Name</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. Data Structures"
+            value={subjectName}
+            onChangeText={t => {
+              setSubjectName(t);
+              setSelectedSubjectId(null);
+            }}
+          />
+
+          <Text style={styles.inputLabel}>Room Number</Text>
+          <View style={styles.inputIconContainer}>
+            <MapPin size={20} color="#757575" style={styles.inputIcon} />
+            <TextInput
+              style={[styles.input, {paddingLeft: 40}]}
+              placeholder="e.g. Lab 301"
+              value={room}
+              onChangeText={setRoom}
+            />
+          </View>
+        </View>
+      </ScrollView>
+
+      <View style={styles.footer}>
+        <TouchableOpacity
+          style={styles.createButton}
+          onPress={handleSubmit}
+          disabled={loading}>
+          {loading ? (
+            <ActivityIndicator color="#FFF" />
+          ) : (
+            <Text style={styles.buttonText}>Go Live Now</Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>
@@ -326,212 +370,155 @@ const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: '#F5F5F5'},
   header: {
     backgroundColor: '#2196F3',
-    paddingTop: 20,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    elevation: 5,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  headerTitle: {
-    color: '#FFF',
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginTop: 5,
-  },
-  profileRow: {flexDirection: 'row', alignItems: 'center', gap: 12},
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#E1E1E1',
-  },
-  teacherName: {color: '#FFF', fontSize: 18, fontWeight: 'bold'},
-  addButton: {backgroundColor: '#FFF', padding: 8, borderRadius: 20},
-  statsContainer: {marginTop: -25, paddingHorizontal: 15},
-  statCard: {
-    backgroundColor: '#FFF',
-    padding: 15,
-    borderRadius: 12,
-    marginRight: 12,
-    minWidth: 130,
-    elevation: 3,
-  },
-  statLabel: {color: '#757575', fontSize: 12, marginBottom: 5},
-  statValue: {fontSize: 24, fontWeight: 'bold'},
-  listContainer: {flex: 1, padding: 20, marginTop: -10},
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#212121',
-    marginBottom: 15,
-  },
-  emptyText: {
-    textAlign: 'center',
-    color: '#999',
-    marginTop: 20,
-    fontSize: 14,
-    fontStyle: 'italic',
-  },
-  ongoingWrapper: {
-    marginBottom: 10,
-  },
-  assignedWrapper: {
-    marginTop: 10,
-    paddingVertical: 5,
-  },
-  subjectCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    padding: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    elevation: 2,
-    borderLeftWidth: 4,
-    borderLeftColor: '#2196F3',
-    width: '100%', // Highlights it's a "create" action
+    gap: 15,
   },
-  subjectIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#E3F2FD',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  subjectName: {fontSize: 16, fontWeight: 'bold', color: '#333'},
-  subjectMeta: {fontSize: 12, color: '#757575', marginTop: 2},
+  headerTitle: {color: '#FFF', fontSize: 20, fontWeight: 'bold'},
+  content: {padding: 20},
   card: {
     backgroundColor: '#FFF',
     borderRadius: 12,
-    padding: 15,
-    marginBottom: 15,
+    padding: 20,
+    marginBottom: 20,
     elevation: 2,
   },
-  cardHeader: {
+  rowBetween: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 15,
-  },
-  className: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#212121',
-    marginBottom: 5,
-  },
-  metaRow: {
-    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 5,
-    gap: 4,
   },
-  metaText: {color: '#757575', fontSize: 13},
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    height: 24,
-    justifyContent: 'center',
+  label: {fontSize: 16, fontWeight: 'bold', color: '#212121'},
+  subLabel: {fontSize: 12, color: '#757575', marginTop: 2},
+  sectionHeader: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#757575',
+    marginBottom: 10,
   },
-  statusText: {fontSize: 10, fontWeight: 'bold'},
-  actionButton: {padding: 12, borderRadius: 8, alignItems: 'center'},
-  actionButtonText: {fontWeight: 'bold', fontSize: 14},
-  bottomNav: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+  inputLabel: {
+    fontSize: 14,
+    color: '#616161',
+    marginBottom: 8,
+    marginTop: 10,
+  },
+  input: {
+    backgroundColor: '#FAFAFA',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 8,
     padding: 12,
+    fontSize: 16,
+    color: '#212121',
+  },
+  inputIconContainer: {position: 'relative', justifyContent: 'center'},
+  inputIcon: {position: 'absolute', left: 12, zIndex: 1},
+  footer: {
+    padding: 20,
     backgroundColor: '#FFF',
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-    position: 'absolute',
-    bottom: 0,
-    width: '100%',
+    borderColor: '#E0E0E0',
   },
-  navItem: {alignItems: 'center'},
-  navText: {fontSize: 12, color: '#757575', marginTop: 4},
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
+  createButton: {
+    backgroundColor: '#2196F3',
+    padding: 16,
+    borderRadius: 12,
     alignItems: 'center',
-    paddingBottom: 50,
   },
-  placeholderText: {
-    fontSize: 18,
-    color: '#999',
-    marginTop: 15,
+  buttonText: {color: '#FFF', fontSize: 16, fontWeight: 'bold'},
+  quickSelectContainer: {
     marginBottom: 20,
+    paddingHorizontal: 5,
   },
-  btnOutline: {
+  quickSelectScroll: {
+    marginTop: 10,
+    paddingBottom: 5,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: '#999',
+    fontStyle: 'italic',
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  subjectChip: {
+    padding: 12,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    marginRight: 10,
+    minWidth: 100,
+    alignItems: 'center',
+  },
+  subjectChipActive: {
+    backgroundColor: '#2196F3',
+  },
+  chipSubName: {
+    fontSize: 10,
+    color: '#757575',
+    marginTop: 2,
+  },
+  chipScroll: {flexDirection: 'row'},
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    marginRight: 10,
     borderWidth: 1,
     borderColor: '#2196F3',
-    paddingHorizontal: 20,
+    gap: 6,
+  },
+  chipActive: {backgroundColor: '#2196F3'},
+  chipText: {color: '#2196F3', fontWeight: '600'},
+  chipTextActive: {color: '#FFF'},
+  batchContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  miniChip: {
+    paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    backgroundColor: '#F5F5F5',
   },
-  profileContainer: {padding: 20, paddingBottom: 100},
-  profileHeader: {alignItems: 'center', marginTop: 20, marginBottom: 40},
-  bigAvatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 4,
-    borderColor: '#FFF',
-    marginBottom: 15,
+  miniChipActive: {
+    backgroundColor: '#2196F3',
+    borderColor: '#2196F3',
   },
-  bigName: {fontSize: 24, fontWeight: 'bold', color: '#333'},
-  roleText: {fontSize: 16, color: '#757575'},
-  menuSection: {
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 20,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  menuText: {fontSize: 16, marginLeft: 15, color: '#333'},
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFEBEE',
-    padding: 15,
-    borderRadius: 12,
-  },
-  logoutText: {
-    color: '#F44336',
-    fontWeight: 'bold',
-    marginLeft: 10,
+  miniChipText: {
     fontSize: 16,
+    color: '#757575',
+    fontWeight: 'bold',
   },
-  versionText: {textAlign: 'center', color: '#BBB', marginTop: 20},
-  infoCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    elevation: 2,
-    marginBottom: 25,
+  miniChipTextActive: {
+    color: '#FFF',
   },
-  infoRow: {
+  theoryLockBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    gap: 15,
+    backgroundColor: '#F5F5F5', // Light gray background
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    marginTop: 5,
+    gap: 8,
   },
-  infoDivider: {height: 1, backgroundColor: '#EEE'},
-  infoLabel: {fontSize: 12, color: '#757575'}, // ✅ Added missing style
-  infoValue: {fontSize: 16, color: '#212121', fontWeight: '600'}, // ✅ Added missing style
+  theoryLockText: {
+    fontSize: 13,
+    color: '#4CAF50', // Success green to indicate it's auto-handled
+    fontWeight: '600',
+    flex: 1,
+  },
+  targetInfoBox: {
+    marginTop: 15,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+  },
 });

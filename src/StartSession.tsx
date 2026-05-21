@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   Modal,
 } from 'react-native';
-import {requestBluetoothPermissions} from './lib/ble';
+import {manager, requestBluetoothPermissions} from './lib/ble';
 import {
   ArrowLeft,
   Pause,
@@ -32,138 +32,83 @@ const APP_UUID = '0000AD50-0000-1000-8000-00805F9B34FB';
 export default function StartSession({classSession, onBack, onNavigate}: any) {
   // Inside export default function StartSession
   const [loading, setLoading] = useState(false); // ✅ Added missing state
-
   const [sessionStarted, setSessionStarted] = useState(false);
-
   const [className, setClassName] = useState(
     classSession?.class_name || classSession?.name || 'Loading Class...',
   );
-
   const [isAdHoc, setIsAdHoc] = useState(
     classSession?.is_live_location || false,
   );
-
   const [beaconActive, setBeaconActive] = useState(false);
   const [currentCode, setCurrentCode] = useState(
     classSession?.active_code || '4892',
   );
-  const [codeExpiry, setCodeExpiry] = useState(45);
-  const [timerRunning, setTimerRunning] = useState(true);
-
+  const [codeExpiry, setCodeExpiry] = useState(0);
+  const [timerRunning, setTimerRunning] = useState(false);
   const [attendeeCount, setAttendeeCount] = useState(0);
   const [totalStudents, setTotalStudents] = useState(0);
   const [showManual, setShowManual] = useState(false);
-
   const [showBatchPicker, setShowBatchPicker] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState('ALL');
   const [isHardwareRequired, setIsHardwareRequired] = useState(true);
 
-  // --- 1. Main Initialization Effect (Runs Once) ---==
-  // --- 1. Main Initialization Effect ---
-  useEffect(() => {
-    if (!classSession?.id) return;
-
-    const initialize = async () => {
-      // A. Handle Subject Pre-selection from Dashboard
-      if (classSession.subject) {
-        setClassName(classSession.subject.name);
-        setSelectedBatch(classSession.subject.target_batch || 'ALL');
-      }
-
-      // B. Fetch persistence data (Hardware Requirement & Mode)
-      const {data: sessData} = await supabase
-        .from('sessions')
-        .select('class_name, is_live_location, is_hardware_required, is_active')
-        .eq('id', classSession.id)
-        .single();
-
-      if (sessData) {
-        // 🎯 This is what ensures the toggle stays OFF if you set it to OFF previously
-        setIsHardwareRequired(sessData.is_hardware_required);
-        setBeaconActive(sessData.is_hardware_required);
-        setIsAdHoc(sessData.is_live_location);
-
-        // Sync class name if not provided by nav
-        if (!classSession.subject) {
-          setClassName(sessData.class_name || 'Unknown Class');
-        }
-
-        // C. Start signal if it was already active
-        if (sessData.is_active && sessData.is_hardware_required) {
-          const granted = await requestBluetoothPermissions();
-          if (granted) {
-            BLEAdvertiser.setCompanyId(0xff);
-            startBroadcast();
-          }
-        }
-      }
-      fetchCounts();
-    };
-
-    initialize();
-
-    // D. Real-time Subscription
-    const sub = supabase
-      .channel('live-room')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'attendance',
-          filter: `session_id=eq.${classSession.id}`,
-        },
-        () => fetchCounts(),
-      )
-      .subscribe();
-
-    const onBackPress = () => {
-      onBack(); // Call your app's back function
-      return true; // Prevents the app from closing entirely
-    };
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      onBackPress,
-    );
-
-    return () => {
-      stopBroadcast();
-      supabase.removeChannel(sub);
-      backHandler.remove();
-    };
-  }, [classSession.id]); // Triggered by session ID
-  // Dependency on ID is safer
-  // --- 2. Timer Effect (Runs only when timer state changes) ---
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-
-    // ✅ FIX: Only run the interval if the session has actually started AND timer isn't paused
-    if (sessionStarted && timerRunning) {
-      timer = setInterval(() => {
-        setCodeExpiry(prev => {
-          if (prev <= 1) {
-            generateNewCode();
-            return 45;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-
-    return () => clearInterval(timer);
-  }, [sessionStarted, timerRunning]);
-
-  // --- Helper Functions ---
-
-  const generateNewCode = () => {
-    const newCode = Math.floor(1000 + Math.random() * 9000).toString();
-    setCurrentCode(newCode);
-    supabase
+  const initialize = async () => {
+    const {data: sessData, error} = await supabase
       .from('sessions')
-      .update({active_code: newCode})
+      .select(
+        'is_active, active_code, timer_state, frozen_seconds, expires_at, is_live_location,is_hardware_required',
+      )
       .eq('id', classSession.id)
-      .then();
-    setCodeExpiry(45);
+      .single();
+
+    if (sessData) {
+      // 🎯 If is_active is false, we show "TAP TO START"
+      setSessionStarted(sessData.is_active);
+      setCurrentCode(sessData.active_code || '----');
+
+      // 🎯 THE MISSING LINK: Restore the Master Switch (Live Signal)
+      setBeaconActive(sessData.is_hardware_required || false);
+
+      // Maintain Geofence preference from DB
+      setIsAdHoc(sessData.is_live_location || false);
+
+      if (sessData.is_active) {
+        // 🎯 Resume logic only if session is already live
+        if (sessData.timer_state === 'RUNNING' && sessData.expires_at) {
+          const now = new Date().getTime();
+          const expiry = new Date(sessData.expires_at).getTime();
+          setCodeExpiry(Math.max(0, Math.floor((expiry - now) / 1000)));
+          setTimerRunning(true);
+        } else {
+          setCodeExpiry(sessData.frozen_seconds || 120);
+          setTimerRunning(false);
+        }
+      } else {
+        // 🎯 New session defaults
+        setCodeExpiry(120);
+        setTimerRunning(false);
+      }
+    }
+    fetchCounts();
+  };
+
+  const generateNewCode = async () => {
+    const newCode = Math.floor(1000 + Math.random() * 9000).toString();
+    const nextExpiry = new Date();
+    nextExpiry.setSeconds(nextExpiry.getSeconds() + 120);
+
+    setCurrentCode(newCode);
+    setCodeExpiry(120);
+
+    await supabase
+      .from('sessions')
+      .update({
+        active_code: newCode,
+        expires_at: nextExpiry.toISOString(),
+        frozen_seconds: 120,
+        timer_state: 'RUNNING',
+      })
+      .eq('id', classSession.id);
   };
 
   const fetchCounts = async () => {
@@ -182,7 +127,7 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
 
   const updateLocation = () => {
     Geolocation.getCurrentPosition(
-      pos =>
+      pos => {
         supabase
           .from('sessions')
           .update({
@@ -190,8 +135,9 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
             gps_long: pos.coords.longitude,
           })
           .eq('id', classSession.id)
-          .then(),
-      err => console.log(err),
+          .then();
+      },
+      err => console.log('GPS ERROR:', err),
       {enableHighAccuracy: true},
     );
   };
@@ -249,48 +195,69 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
     } else {
       // 2. If it's Theory, default to ALL and proceed with hardware check
       setSelectedBatch('ALL');
-      triggerHardwareCheck();
+      triggerSecurityMenu();
     }
   };
 
-  const triggerHardwareCheck = () => {
-    if (!beaconActive) {
-      Alert.alert(
-        '⚠️ Security Warning',
-        'Live Signal (Bluetooth/GPS) is OFF. Students can mark attendance from anywhere using only the code. Proceed?',
-        [
-          {text: 'Cancel', style: 'cancel'},
-          {
-            text: 'Start Anyway',
-            onPress: () => confirmStart(false),
-          },
-          {
-            text: 'Turn On & Start',
-            onPress: () => {
-              startBroadcast();
-              confirmStart(true);
-            },
-          },
-        ],
-      );
-    } else {
-      confirmStart(true);
-    }
+  const triggerSecurityMenu = () => {
+    // This satisfies your "ask the user what to do" requirement
+    Alert.alert(
+      '⚠️ Security Setup',
+      'Choose the verification level for this class:',
+      [
+        {
+          text: 'Code Only (No Security)',
+          onPress: () => confirmStart(false, false),
+        },
+        {
+          text: 'Code + Bluetooth',
+          onPress: () => confirmStart(true, false),
+        },
+        {
+          text: 'Full (Signal + GPS)',
+          onPress: () => confirmStart(true, true),
+        },
+        {text: 'Cancel', style: 'cancel'},
+      ],
+    );
   };
 
-  const confirmStart = async (hardwareRequired: boolean) => {
-    setSessionStarted(true);
-    setTimerRunning(true);
+  const confirmStart = async (useSignal: boolean, useGPS: boolean) => {
+    setLoading(true);
+    try {
+      // 1. Set local UI states
+      setSessionStarted(true);
+      setTimerRunning(true);
+      setBeaconActive(useSignal);
+      setIsAdHoc(useGPS);
 
-    // Update Supabase so students know the session is officially "Open"
-    await supabase
-      .from('sessions')
-      .update({
-        is_hardware_required: hardwareRequired,
-        is_active: true,
-        target_batch: selectedBatch,
-      })
-      .eq('id', classSession.id);
+      // 2. Calculate the first expiry point (Current Time + 120s)
+      const firstExpiry = new Date();
+      firstExpiry.setSeconds(firstExpiry.getSeconds() + 120);
+
+      // 3. Update Supabase to transition the class to 'Active' lifecycle
+      await supabase
+        .from('sessions')
+        .update({
+          is_active: true,
+          is_hardware_required: useSignal,
+          is_live_location: useGPS,
+          target_batch: selectedBatch,
+          timer_state: 'RUNNING',
+          expires_at: firstExpiry.toISOString(),
+          frozen_seconds: 120,
+        })
+        .eq('id', classSession.id);
+
+      // 4. Fire up hardware only if requested
+      if (useSignal) {
+        await startBroadcast(); // This now internally checks useGPS/isAdHoc
+      }
+    } catch (error) {
+      console.error('Initialization failed:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleModeToggle = async (newValue: boolean) => {
@@ -356,11 +323,12 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
           await stopBroadcast();
           await supabase
             .from('sessions')
-            .update({is_active: false,
-              closed_at: new Date().toISOString() // records the current date
+            .update({
+              is_active: false,
+              closed_at: new Date().toISOString(), // records the current date
             })
             .eq('id', classSession.id);
-          onBack();
+          onBack('dashboard');
         },
       },
     ]);
@@ -373,12 +341,121 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
   const RADIUS = 95;
   const STROKE_WIDTH = 15;
   const circumference = 2 * Math.PI * RADIUS;
-  const strokeDashoffset = circumference * (1 - codeExpiry / 45);
+  const strokeDashoffset = circumference * (1 - codeExpiry / 120);
   const center = CIRCLE_SIZE / 2; //Autocalculates center
   const percentage =
     totalStudents > 0 ? Math.round((attendeeCount / totalStudents) * 100) : 0;
 
-  // ... inside your component, find "return (" and replace it with this:
+  const toggleTimer = async () => {
+    const willBeRunning = !timerRunning;
+    setTimerRunning(willBeRunning);
+
+    if (willBeRunning) {
+      // 🎯 RESUMING: Set a future "Death Date" based on current countdown
+      const newExpiry = new Date();
+      newExpiry.setSeconds(newExpiry.getSeconds() + codeExpiry);
+
+      await supabase
+        .from('sessions')
+        .update({
+          timer_state: 'RUNNING',
+          expires_at: newExpiry.toISOString(),
+        })
+        .eq('id', classSession.id);
+    } else {
+      // 🎯 PAUSING: Freeze the current second in the DB
+      await supabase
+        .from('sessions')
+        .update({
+          timer_state: 'PAUSED',
+          frozen_seconds: codeExpiry,
+          expires_at: null, // Clear the goalpost
+        })
+        .eq('id', classSession.id);
+    }
+  };
+
+  useEffect(() => {
+    const subscription = manager.onStateChange(state => {
+      // 🎯 Only act if the session is LIVE and the beacon should be active
+      if (sessionStarted && beaconActive) {
+        if (state === 'PoweredOff') {
+          // This handles the mid-session manual Bluetooth turn-off
+          Alert.alert(
+            '⚠️ Signal Lost',
+            'Your Bluetooth was turned off. Students can no longer verify their location.',
+          );
+        }
+
+        if (state === 'PoweredOn') {
+          console.log('Hardware recovered. Re-starting broadcast...');
+          // 🎯 We call startBroadcast which already has the 800ms "breath" delay
+          startBroadcast();
+        }
+      }
+    }, true);
+
+    return () => subscription.remove();
+  }, [beaconActive, sessionStarted]); // 🚀 Runs every time the toggle changes
+  // --- 1. Main Initialization Effect (Runs Once) ---
+
+  useEffect(() => {
+    if (!classSession?.id) return;
+
+    initialize();
+
+    // D. Real-time Subscription
+    const sub = supabase
+      .channel('live-room')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'attendance',
+          filter: `session_id=eq.${classSession.id}`,
+        },
+        () => fetchCounts(),
+      )
+      .subscribe();
+
+    const onBackPress = () => {
+      onBack('dashboard'); // Call your app's back function
+      return true; // Prevents the app from closing entirely
+    };
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      onBackPress,
+    );
+
+    return () => {
+      stopBroadcast();
+      supabase.removeChannel(sub);
+      backHandler.remove();
+    };
+  }, [classSession.id]); // Triggered by session ID
+  // Dependency on ID is safer
+  // --- 2. Timer Effect (Runs only when timer state changes) ---
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+
+    // ✅ FIX: Only run the interval if the session has actually started AND timer isn't paused
+    if (sessionStarted && timerRunning) {
+      timer = setInterval(() => {
+        setCodeExpiry(prev => {
+          if (prev <= 1) {
+            generateNewCode();
+            return 120;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+
+    return () => clearInterval(timer);
+  }, [sessionStarted, timerRunning]);
+
+  // --- Helper Functions ---
 
   return (
     <View style={styles.container}>
@@ -395,19 +472,31 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
           {className}
         </Text>
       </View>
+
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* ---------------- LOCATION SECURITY MODE ---------------- */}
         <View style={styles.card}>
           <View style={styles.rowBetween}>
             <View style={styles.rowFill}>
               {/* ✅ Uses new rowFill style */}
-              <View style={[styles.iconCircle, {backgroundColor: '#E3F2FD'}]}>
-                <Radius color="#2196F3" size={20} />
+              <View
+                style={[
+                  styles.iconCircle,
+                  {
+                    backgroundColor:
+                      isAdHoc && beaconActive ? '#2196F3' : '#EEEEEE',
+                  },
+                ]}>
+                <Radius color={isAdHoc ? '#fff' : '#757575'} size={20} />
               </View>
               {/* ✅ This View now has flex: 1 to protect the switch */}
               <View style={{marginLeft: 12, flex: 1}}>
                 <View
-                  style={{flexDirection: 'row', alignItems: 'center', gap: 6}}>
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}>
                   <Text style={styles.cardTitle}>Geofence Mode</Text>
                   <TouchableOpacity
                     onPress={() =>
@@ -417,13 +506,15 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
                       )
                     }
                     style={{padding: 4}}>
-                    <Info size={18} color="#2196F3" />
+                    <Info size={18} color={isAdHoc ? '#757575' : '#2196F3'} />
                   </TouchableOpacity>
                 </View>
                 <Text
                   style={{color: '#757575', fontSize: 11}}
                   numberOfLines={1}>
-                  {isAdHoc ? '📍 Verified by Teacher' : '🏫 Verified by Room'}
+                  {isAdHoc
+                    ? ' Verified by Teacher Location'
+                    : ' Verified by Room Location'}
                 </Text>
               </View>
             </View>
@@ -434,11 +525,36 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
                 <ActivityIndicator size="small" color="#2196F3" />
               ) : (
                 <Switch
-                  value={isAdHoc}
-                  onValueChange={handleModeToggle}
-                  trackColor={{false: '#E0E0E0', true: '#90CAF9'}}
-                  thumbColor={isAdHoc ? '#2196F3' : '#f4f3f4'}
-                  style={{width: 50}}
+                  // 🎯 Visuals stay locked to the Master Switch
+                  value={sessionStarted && beaconActive ? isAdHoc : false}
+                  thumbColor={
+                    isAdHoc && sessionStarted && beaconActive
+                      ? '#2196F3'
+                      : '#f4f3f4'
+                  }
+                  // 🎯 Removed 'disabled' prop so we can intercept the tap
+                  onValueChange={val => {
+                    // 1. Check if class has even started
+                    if (!sessionStarted) {
+                      Alert.alert(
+                        'Class Not Started',
+                        "Please tap the 'Start Class' circle before adjusting settings.",
+                      );
+                      return;
+                    }
+
+                    // 2. 🎯 THE FEEDBACK: Check if Master Switch is off
+                    if (!beaconActive) {
+                      Alert.alert(
+                        'Live Signal Required',
+                        "You must turn on the 'Live Signal' first to use Geofence Mode.",
+                      );
+                      return;
+                    }
+
+                    // 3. If everything is active, proceed with your normal logic
+                    handleModeToggle(val);
+                  }}
                 />
               )}
             </View>
@@ -452,9 +568,16 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
               <View
                 style={[
                   styles.iconCircle,
-                  {backgroundColor: beaconActive ? '#4CAF50' : '#EEEEEE'},
+                  // 🎯 Only blue if BOTH toggles are active
+                  {
+                    backgroundColor:
+                      isAdHoc && beaconActive ? '#2196F3' : '#EEEEEE',
+                  },
                 ]}>
-                <Radio color={beaconActive ? '#FFF' : '#757575'} size={20} />
+                <Radius
+                  color={isAdHoc && beaconActive ? '#fff' : '#757575'}
+                  size={20}
+                />
               </View>
               <View style={{marginLeft: 12}}>
                 <Text style={styles.cardTitle}>Live Signal</Text>
@@ -470,38 +593,37 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
             </View>
 
             <View style={styles.switchContainer}>
+              {/* Geofence Mode Card */}
               <Switch
-                value={beaconActive}
-                trackColor={{false: '#E0E0E0', true: '#A5D6A7'}}
-                thumbColor={beaconActive ? '#4CAF50' : '#f4f3f4'}
+                value={sessionStarted ? beaconActive : false}
+                disabled={!sessionStarted}
+                thumbColor={
+                  beaconActive && sessionStarted ? '#4CAF50' : '#f4f3f4'
+                }
                 onValueChange={async val => {
-                  // 1. Immediate local update
+                  // 1. Update local state
                   setBeaconActive(val);
-                  setIsHardwareRequired(val);
 
-                  // 2. Persist to Supabase immediately
-                  const {error} = await supabase
+                  // 2. Sync Master Switch to Supabase
+                  await supabase
                     .from('sessions')
                     .update({is_hardware_required: val})
                     .eq('id', classSession.id);
 
-                  if (error) {
-                    console.error('Toggle sync failed:', error);
-                    return;
-                  }
-
-                  // 3. Control hardware
-                  if (!val) {
-                    Alert.alert(
-                      'Security OFF',
-                      'Hardware checks are now disabled for this session.',
-                    );
-                    stopBroadcast();
-                  } else {
+                  if (val) {
                     startBroadcast();
+                  } else {
+                    stopBroadcast();
+                    // 3. 🎯 THE KILL SWITCH: If Live Signal turns off, force Geofence off
+                    if (isAdHoc) {
+                      setIsAdHoc(false);
+                      await supabase
+                        .from('sessions')
+                        .update({is_live_location: false})
+                        .eq('id', classSession.id);
+                    }
                   }
                 }}
-                style={{width: 50}}
               />
             </View>
           </View>
@@ -513,16 +635,13 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
 
           <TouchableOpacity
             activeOpacity={0.8}
-            onPress={
-              sessionStarted
-                ? () => setTimerRunning(!timerRunning)
-                : handleStartClass
-            }
+            onPress={sessionStarted ? toggleTimer : handleStartClass}
             style={styles.circleContainer}>
             <Svg
               height={CIRCLE_SIZE}
               width={CIRCLE_SIZE}
               viewBox={`0 0 ${CIRCLE_SIZE} ${CIRCLE_SIZE}`}>
+              {/* Background Circle */}
               <Circle
                 cx={center}
                 cy={center}
@@ -531,6 +650,8 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
                 strokeWidth={STROKE_WIDTH}
                 fill="none"
               />
+
+              {/* Progress Circle (Rotating) */}
               <Circle
                 cx={center}
                 cy={center}
@@ -551,7 +672,13 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
               />
             </Svg>
 
-            <View style={{position: 'absolute', alignItems: 'center'}}>
+            {/* CENTER CONTENT: Where the magic happens */}
+            <View
+              style={{
+                position: 'absolute',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
               {!sessionStarted ? (
                 <>
                   <Text style={styles.startLabel}>TAP TO</Text>
@@ -559,12 +686,35 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
                 </>
               ) : (
                 <>
+                  {/* Large Rotating Code */}
                   <Text
-                    style={[styles.codeText, !timerRunning && {color: '#CCC'}]}>
+                    style={[
+                      styles.codeText,
+                      {fontSize: 48, fontWeight: '900'},
+                      !timerRunning && {color: '#CCC'},
+                    ]}>
                     {currentCode}
                   </Text>
-                  <Text style={styles.expiryText}>
-                    {timerRunning ? `${codeExpiry}s left` : 'PAUSED'}
+
+                  {/* Dynamic Interaction Label */}
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      color: '#757575',
+                      fontWeight: 'bold',
+                      letterSpacing: 1,
+                    }}>
+                    {timerRunning ? 'CLICK TO PAUSE' : 'CLICK TO RESUME'}
+                  </Text>
+
+                  {/* Seconds Countdown */}
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      color: timerRunning ? '#FF9800' : '#BDBDBD',
+                      marginTop: 4,
+                    }}>
+                    {codeExpiry}s left
                   </Text>
                 </>
               )}
@@ -660,7 +810,7 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
               style={styles.confirmBtn}
               onPress={() => {
                 setShowBatchPicker(false);
-                triggerHardwareCheck();
+                triggerSecurityMenu();
               }}>
               <Text style={styles.confirmBtnText}>
                 Start Session for Batch {selectedBatch}

@@ -39,13 +39,30 @@ export default function MarkAttendance({classSession, onBack}: any) {
   const [isError, setIsError] = useState(false);
   const [isHardwareRequired, setIsHardwareRequired] = useState(true); // New variable
   const [isAlreadyMarked, setIsAlreadyMarked] = useState(false);
-
+  const [liveCode, setLiveCode] = useState(classData.active_code);
   // ✅ FIX #1: Added One-Time Code State
   const [inputCode, setInputCode] = useState('');
 
   useEffect(() => {
+    const channel = supabase
+      .channel(`session_${classData.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'sessions',
+          filter: `id=eq.${classData.id}`,
+        },
+        payload => {
+          if (payload.new.active_code) {
+            setLiveCode(payload.new.active_code); // Update the state instantly
+          }
+        },
+      )
+      .subscribe();
+
     runChecks();
-    // 🎯 FIX: Hardware Back Button Listener
     const backAction = () => {
       onBack(); // Trigger the standard back navigation passed as a prop
       return true; // Tells Android we handled the press
@@ -57,10 +74,11 @@ export default function MarkAttendance({classSession, onBack}: any) {
     );
 
     return () => {
+      supabase.removeChannel(channel);
       manager.stopDeviceScan(); // Stop BLE scan
       backHandler.remove(); // 🎯 Stop listening for back button
     };
-  }, []);
+  }, [classData.id]);
 
   const runChecks = async () => {
     // 1. Fetch current session rules
@@ -86,22 +104,35 @@ export default function MarkAttendance({classSession, onBack}: any) {
     checkLocation();
   };
 
+  // Replace your existing scanForTeacher with this:
   const scanForTeacher = () => {
-    manager.startDeviceScan(null, {allowDuplicates: false}, (error, device) => {
-      if (error) return;
-      if (device && device.serviceUUIDs) {
-        const match = device.serviceUUIDs.some(
-          uuid =>
-            uuid.toUpperCase().includes(SHORT_UUID) ||
-            uuid.toUpperCase() === SERVICE_UUID.toUpperCase(),
-        );
-        if (match) {
-          setBleFound(true);
-          manager.stopDeviceScan();
-        }
-      }
-    });
-    setTimeout(() => manager.stopDeviceScan(), 15000);
+    const performScan = () => {
+      if (bleFound) return; // Stop if already verified
+
+      manager.startDeviceScan(
+        null,
+        {allowDuplicates: false},
+        (error, device) => {
+          if (
+            device?.serviceUUIDs?.some(uuid =>
+              uuid.toUpperCase().includes(SHORT_UUID),
+            )
+          ) {
+            setBleFound(true);
+            manager.stopDeviceScan();
+          }
+        },
+      );
+
+      // Stop scan after 3 seconds to save battery, then repeat
+      setTimeout(() => manager.stopDeviceScan(), 3000);
+    };
+
+    // 🎯 HEARTBEAT: Try every 5 seconds
+    performScan();
+    const interval = setInterval(performScan, 5000);
+
+    return interval;
   };
 
   const checkLocation = () => {
@@ -136,7 +167,7 @@ export default function MarkAttendance({classSession, onBack}: any) {
     setIsError(false);
 
     // 1. Validate Code
-    if (inputCode !== classData.active_code) {
+    if (inputCode !== liveCode) {
       setIsError(true);
       setTimeout(() => setIsError(false), 2000);
       Alert.alert('Invalid Code', 'The code does not match the session.');

@@ -75,7 +75,7 @@ export default function TeacherDashboard({
         .from('sessions')
         .select('*, subjects(*)')
         .eq('teacher_id', teacher.id)
-        .eq('is_active', true);
+        .is('closed_at', null);
 
       // 2. 🎯 FIX: Fetch Subjects via the Assignment Bridge Table
       const {data: assignments, error: subErr} = await supabase
@@ -163,7 +163,7 @@ export default function TeacherDashboard({
   };
 
   const renderClassItem = ({item}: any) => {
-    const status = getStatusColor(item.is_active);
+    const status = getStatusColor(item.closed_at === null);
     const displayName =
       item.class_name || item.subjects?.name || 'Untitled Class';
     const displayRoom = item.room_number || 'Room TBD';
@@ -208,8 +208,8 @@ export default function TeacherDashboard({
           style={[
             styles.actionButton,
             {
-              backgroundColor: item.is_active ? '#2196F3' : '#fff',
-              borderWidth: item.is_active ? 0 : 1,
+              backgroundColor: !item.closed_at ? '#2196F3' : '#fff',
+              borderWidth: !item.closed_at ? 0 : 1,
               borderColor: '#E0E0E0',
             },
           ]}
@@ -222,14 +222,15 @@ export default function TeacherDashboard({
               beacon_id: item.beacon_id,
               active_code: item.active_code,
               is_active: item.is_active,
+              closed_at: item.closed_at,
             })
           }>
           <Text
             style={[
               styles.actionButtonText,
-              {color: item.is_active ? '#FFF' : '#333'},
+              {color: !item.closed_at ? '#FFF' : '#333'},
             ]}>
-            {item.is_active ? 'Manage Session' : 'View Report'}
+            {!item.closed_at ? 'Manage Session' : 'View Report'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -284,7 +285,7 @@ export default function TeacherDashboard({
               <View style={styles.statCard}>
                 <Text style={styles.statLabel}>Active Now</Text>
                 <Text style={[styles.statValue, {color: '#4CAF50'}]}>
-                  {classes.filter(c => c.is_active).length}
+                  {classes.filter(c => c.closed_at === null).length}
                 </Text>
               </View>
             </ScrollView>

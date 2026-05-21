@@ -187,5 +187,6 @@ Here is the updated content for your **Adsum_context.md** file to reflect the la
 * **Final Report Generation:** Build the "Export to PDF/Excel" feature in the Teacher Reports tab for official university records.
 * **Push Notifications:** Alert students instantly when an "Ongoing Session" matching their profile is started.
 * **Profile Editing:** Allow students to update their Batch (A/B/C) if their official division changes mid-semester.
-
+* bro listen to me this is very serious the issue that i told you about is very serious when in mid session in teacher when everything si fine and i turn off bluetooth of my phone suddunly no error alert comes to me and the student phone cant find bluetooth so then i turn on bluetooth in phone student phone still cant find then i turn off and again on live signal toggle still student phone cant find teacher then i go from mark attendance ie class back to student dashboard then again go to respective class then i can mark attendance fix this efficiently without ruining other code also the circular timer initally says start class but it should say start timer cause class has already been started and it should also show code and the code thing still doesnt work when code changes unless i go back to student dashboard and get back to ongoing class new code is shown wrong and old code works but most of the time teacher dont remember old code (i guess this issue is fixed so dont count it )
+### ^^^very serious
 

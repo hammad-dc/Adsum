@@ -56,7 +56,7 @@ export default function LiveAttendanceView({
   useEffect(() => {
     const backAction = () => {
       if (onBack) {
-        onBack();
+        onBack('dashboard');
         return true;
       }
       return false;

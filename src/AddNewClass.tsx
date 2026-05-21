@@ -1,5 +1,4 @@
 import React, {useState, useEffect} from 'react';
-import Geolocation from 'react-native-geolocation-service';
 import {
   View,
   Text,
@@ -10,7 +9,6 @@ import {
   Switch,
   Alert,
   ActivityIndicator,
-  PermissionsAndroid, // 👈 ADD THIS
   Platform,
   BackHandler,
 } from 'react-native';
@@ -47,7 +45,7 @@ export default function AddNewClass({onBack, onClassCreated, params}: any) {
         onBack('dashboard'); // Run the back navigation prop passed from the parent
         return true; // "true" means: I handled it, don't close the app.
       }
-      return false; // "false" means: I didn't handle it, let the OS decide.
+      return false; // "false" means: I didn't handle it, let the OS decide. 19.134490, 72.843676
     };
 
     // 2. Register the listener
@@ -122,108 +120,69 @@ export default function AddNewClass({onBack, onClassCreated, params}: any) {
     }
 
     setLoading(true);
-    let isPermissionGranted = false;
+
     try {
-      if (Platform.OS === 'android') {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-          {
-            title: 'Adsum Geofence Access',
-            message:
-              'Adsum needs access to your GPS location to verify you are starting the session from the correct classroom. This prevents proxy attendance.',
-            buttonNeutral: 'Ask Me Later',
-            buttonNegative: 'Cancel',
-            buttonPositive: 'OK',
-          },
-        );
+      // 1. 🎯 Fetch the official static coordinates for the selected room
+      // If the room doesn't exist in the DB, it won't crash, it just won't have coords yet
+      const {data: roomData} = await supabase
+        .from('classrooms')
+        .select('gps_lat, gps_long')
+        .eq('room_name', room)
+        .single();
 
-        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-          isPermissionGranted = true;
-        } else if (granted === PermissionsAndroid.RESULTS.DENIED) {
-        } else if (granted === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
-          Alert.alert(
-            'Permission Required',
-            'You have denied location access permanently. Please go to your phone settings and enable Location permissions manually for Adsum.',
-          );
-        }
-      } else {
-        // Handle iOS if needed later
-        isPermissionGranted = true;
+      const {
+        data: {user},
+      } = await supabase.auth.getUser();
+      const newBeaconId = `BEACON-${Math.floor(Math.random() * 10000)}`;
+      const initialCode = Math.floor(1000 + Math.random() * 9000).toString();
+
+      // 2. 🎯 Insert into Supabase WITH the ROOM coordinates
+      const {data, error} = await supabase
+        .from('sessions')
+        .insert({
+          class_name: subjectName,
+          room_number: room,
+          teacher_id: user?.id,
+          subject_id:
+            selectedSubjectId && selectedSubjectId < 900
+              ? selectedSubjectId
+              : null,
+          target_course: targetCourse,
+          target_year: targetYear,
+          target_semester: targetSemester,
+          target_batch: selectedBatch,
+          beacon_id: newBeaconId,
+          active_code: initialCode,
+
+          // MASTER GATE LOGIC
+          is_active: false,
+          timer_state: 'PAUSED',
+          frozen_seconds: 120,
+          expires_at: null,
+
+          // 🎯 DEFAULT TO ROOM LOCATION
+          is_live_location: false,
+          gps_lat: roomData?.gps_lat || null,
+          gps_long: roomData?.gps_long || null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (onClassCreated) {
+        onClassCreated({
+          ...data,
+          class_name: subjectName,
+          room_number: room,
+        });
       }
-    } catch (err) {
-      console.warn(err);
-    }
-
-    // Stop if permission was not granted
-    if (!isPermissionGranted) {
+      onBack();
+    } catch (err: any) {
+      Alert.alert('Database Error', err.message);
+    } finally {
       setLoading(false);
-      return; // 🛑 Halt flow
     }
-
-    // 1. Get current GPS coordinates first
-    Geolocation.getCurrentPosition(
-      async position => {
-        const {latitude, longitude} = position.coords;
-
-        try {
-          const {
-            data: {user},
-          } = await supabase.auth.getUser();
-          const newBeaconId = `BEACON-${Math.floor(Math.random() * 10000)}`;
-          const initialCode = Math.floor(
-            1000 + Math.random() * 9000,
-          ).toString();
-
-          // 2. Insert into Supabase WITH the coordinates
-          const {data, error} = await supabase
-            .from('sessions')
-            .insert({
-              class_name: subjectName,
-              room_number: room,
-              teacher_id: user?.id,
-              subject_id:
-                selectedSubjectId && selectedSubjectId < 900
-                  ? selectedSubjectId
-                  : null,
-              target_course: targetCourse,
-              target_year: targetYear,
-              target_semester: targetSemester,
-              target_batch: selectedBatch,
-              beacon_id: newBeaconId,
-              active_code: initialCode,
-              is_active: true,
-              gps_lat: latitude, // ✅ Added
-              gps_long: longitude, // ✅ Added
-            })
-            .select()
-            .single();
-
-          if (error) throw error;
-
-          if (onClassCreated) {
-            onClassCreated({
-              ...data,
-              class_name: subjectName,
-              room_number: room,
-            });
-          }
-          onBack();
-        } catch (err: any) {
-          Alert.alert('Database Error', err.message);
-        } finally {
-          setLoading(false);
-        }
-      },
-      error => {
-        setLoading(false);
-        Alert.alert(
-          'GPS Error',
-          'Could not get your location. Please check if GPS is on.',
-        );
-        console.error(error);
-      },
-      {enableHighAccuracy: true, timeout: 15000, maximumAge: 10000},
-    );
   };
 
   return (

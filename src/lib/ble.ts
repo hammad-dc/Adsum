@@ -1,5 +1,5 @@
-import { BleManager } from 'react-native-ble-plx';
-import { PermissionsAndroid, Platform } from 'react-native';
+import {BleManager} from 'react-native-ble-plx';
+import {PermissionsAndroid, Platform} from 'react-native';
 
 export const manager = new BleManager();
 
@@ -24,7 +24,9 @@ export const requestBluetoothPermissions = async () => {
       result['android.permission.BLUETOOTH_CONNECT'] ===
         PermissionsAndroid.RESULTS.GRANTED &&
       result['android.permission.BLUETOOTH_ADVERTISE'] ===
-        PermissionsAndroid.RESULTS.GRANTED // ✅ CHECK THIS TOO
+        PermissionsAndroid.RESULTS.GRANTED && 
+      result['android.permission.ACCESS_FINE_LOCATION'] ===
+        PermissionsAndroid.RESULTS.GRANTED
     );
   }
 
@@ -42,7 +44,7 @@ export const scanForTeacher = (
 ) => {
   console.log('🔍 Scanning for Teacher Beacon:', TARGET_SERVICE_UUID);
 
-  manager.startDeviceScan(null, { allowDuplicates: true }, (error, device) => {
+  manager.startDeviceScan(null, {allowDuplicates: true}, (error, device) => {
     if (error) {
       console.log('Scan Error:', error);
       return;

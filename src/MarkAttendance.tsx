@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useRef, useState, useEffect, useCallback} from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,9 @@ import {
   MapPin,
   CheckCircle,
   Keyboard,
-} from 'lucide-react-native';
+} from 'lucide-react-native'; // Add this to your React imports
+
+// Add this right under your useState hooks inside the component:
 import {supabase} from './lib/supabase';
 import {manager, requestBluetoothPermissions} from './lib/ble';
 import Geolocation from 'react-native-geolocation-service';
@@ -29,8 +31,9 @@ const SERVICE_UUID = '0000AD50-0000-1000-8000-00805F9B34FB';
 const SHORT_UUID = 'AD50';
 const MAX_DISTANCE_METERS = 50; // Strict 50m limit
 
-export default function MarkAttendance({classSession, onBack}: any) {
-  const classData = classSession;
+export default function MarkAttendance({classSession: classData, onBack}: any) {
+  let bleIntervalId: NodeJS.Timeout;
+  const bleIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [step, setStep] = useState(1);
   const [bleFound, setBleFound] = useState(false);
   const [gpsVerified, setGpsVerified] = useState(false);
@@ -40,8 +43,38 @@ export default function MarkAttendance({classSession, onBack}: any) {
   const [isHardwareRequired, setIsHardwareRequired] = useState(true); // New variable
   const [isAlreadyMarked, setIsAlreadyMarked] = useState(false);
   const [liveCode, setLiveCode] = useState(classData.active_code);
-  // ✅ FIX #1: Added One-Time Code State
+  // FIX: Added One-Time Code State
   const [inputCode, setInputCode] = useState('');
+
+  const decodeBase64ToBytes = (base64Str: string): number[] => {
+    const chars =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    const lookup = new Uint8Array(256);
+    for (let i = 0; i < chars.length; i++) lookup[chars.charCodeAt(i)] = i;
+
+    const bufferLength = base64Str.length * 0.75;
+    const bytes = new Uint8Array(bufferLength);
+    let p = 0;
+
+    for (let i = 0; i < base64Str.length; i += 4) {
+      const base64Bytes = [
+        lookup[base64Str.charCodeAt(i)],
+        lookup[base64Str.charCodeAt(i + 1)],
+        lookup[base64Str.charCodeAt(i + 2)],
+        lookup[base64Str.charCodeAt(i + 3)],
+      ];
+
+      const bytesValue =
+        (base64Bytes[0] << 18) |
+        (base64Bytes[1] << 12) |
+        (base64Bytes[2] << 6) |
+        base64Bytes[3];
+      bytes[p++] = (bytesValue >> 16) & 255;
+      bytes[p++] = (bytesValue >> 8) & 255;
+      bytes[p++] = bytesValue & 255;
+    }
+    return Array.from(bytes);
+  };
 
   useEffect(() => {
     const channel = supabase
@@ -76,12 +109,93 @@ export default function MarkAttendance({classSession, onBack}: any) {
     return () => {
       supabase.removeChannel(channel);
       manager.stopDeviceScan(); // Stop BLE scan
-      backHandler.remove(); // 🎯 Stop listening for back button
+      backHandler.remove(); // Stop listening for back button
+
+      // This ensures the loop is permanently killed when leaving the screen
+      if (bleIntervalRef.current) {
+        clearInterval(bleIntervalRef.current);
+        bleIntervalRef.current = null;
+      }
     };
   }, [classData.id]);
 
-  const runChecks = async () => {
-    // 1. Fetch current session rules
+  const scanForTeacher = useCallback(() => {
+    const expectedMajor = Math.floor(classData.id / 65536);
+    const expectedMinor = classData.id % 65536;
+
+    const performScan = async () => {
+      if (bleFound) return;
+
+      const state = await manager.state();
+      if (state !== 'PoweredOn') return;
+
+      // Anti-Spam tracker for the terminal
+      const loggedDevicesInBurst = new Set();
+
+      manager.startDeviceScan(null, {}, (error, device) => {
+        if (error) return;
+        if (!device?.id || !device?.manufacturerData) return;
+
+        try {
+          const decodedBytes = decodeBase64ToBytes(device.manufacturerData);
+
+          let isMatch = false;
+
+          // 🎯 UNIVERSAL SCANNER: Slide through the array looking for our exact 4-byte signature
+          // This works no matter how many random bytes Samsung or Xiaomi injects at the start
+          for (let i = 0; i < decodedBytes.length - 3; i++) {
+            if (
+              decodedBytes[i] === 255 &&
+              decodedBytes[i + 1] === 0 &&
+              decodedBytes[i + 2] === expectedMajor &&
+              decodedBytes[i + 3] === expectedMinor
+            ) {
+              isMatch = true;
+              break; // Sequence found, stop looking
+            }
+          }
+
+          if (isMatch) {
+            console.log(
+              `✅ MATCH FOUND FOR CLASS ${
+                classData.id
+              }! Array was: [${decodedBytes.join(', ')}]`,
+            );
+
+            setBleFound(true);
+            setLoading(false);
+
+            manager.stopDeviceScan();
+            if (bleIntervalRef.current) {
+              clearInterval(bleIntervalRef.current);
+              bleIntervalRef.current = null;
+            }
+          }
+          // Optional: Only log devices that have our Company ID (255) but didn't match the class, to help debug
+          else if (decodedBytes.includes(255)) {
+            if (!loggedDevicesInBurst.has(device.id)) {
+              loggedDevicesInBurst.add(device.id);
+              console.log(
+                `🔎 Saw Adsum App, but wrong class. Array: [${decodedBytes.join(
+                  ', ',
+                )}]`,
+              );
+            }
+          }
+        } catch (e) {
+          // Silently ignore parse errors
+        }
+      });
+
+      // Pause hardware scanner after 3 seconds
+      setTimeout(() => manager.stopDeviceScan(), 3000);
+    };
+
+    performScan();
+    bleIntervalRef.current = setInterval(performScan, 5000);
+  }, [classData.id, bleFound]);
+
+  const runChecks = useCallback(async () => {
     const {data: session} = await supabase
       .from('sessions')
       .select('is_hardware_required')
@@ -92,48 +206,18 @@ export default function MarkAttendance({classSession, onBack}: any) {
     setIsHardwareRequired(hardwareNeeded);
 
     if (!hardwareNeeded) {
-      // ✅ BYPASS: Teacher allowed code-only attendance
       setBleFound(true);
       setGpsVerified(true);
       return;
     }
 
-    // 🛡️ NORMAL: Run full security checks
     const blePerm = await requestBluetoothPermissions();
-    if (blePerm) scanForTeacher();
+    if (blePerm) {
+      // Call the function, it handles the interval assignment internally now
+      scanForTeacher();
+    }
     checkLocation();
-  };
-
-  // Replace your existing scanForTeacher with this:
-  const scanForTeacher = () => {
-    const performScan = () => {
-      if (bleFound) return; // Stop if already verified
-
-      manager.startDeviceScan(
-        null,
-        {allowDuplicates: false},
-        (error, device) => {
-          if (
-            device?.serviceUUIDs?.some(uuid =>
-              uuid.toUpperCase().includes(SHORT_UUID),
-            )
-          ) {
-            setBleFound(true);
-            manager.stopDeviceScan();
-          }
-        },
-      );
-
-      // Stop scan after 3 seconds to save battery, then repeat
-      setTimeout(() => manager.stopDeviceScan(), 3000);
-    };
-
-    // 🎯 HEARTBEAT: Try every 5 seconds
-    performScan();
-    const interval = setInterval(performScan, 5000);
-
-    return interval;
-  };
+  }, [classData.id, scanForTeacher]);
 
   const checkLocation = () => {
     const targetLat = classData.gps_lat;
@@ -582,8 +666,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   otpBox: {
-    width: 60,
-    height: 75,
+    width: '22%',
+    aspectRatio: 0.8,
     borderRadius: 12,
     backgroundColor: '#F8FAFC',
     borderWidth: 1.5,

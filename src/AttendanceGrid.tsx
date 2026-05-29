@@ -39,8 +39,17 @@ export default function AttendanceGrid({
   const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
   // Logic: (ScreenWidth - CardMargins - CardPadding - (7 * 2 * Margin)) / 7
+  // Get screen width
   const screenWidth = Dimensions.get('window').width;
-  const squareSize = (screenWidth - 32 - 40 - 56) / 7; // Fixed 4px margin logic
+
+  // Calculate exact available space
+  const cardMargins = 32; // marginHorizontal: 16 (16 * 2)
+  const cardPadding = 40; // padding: 20 inside the card (20 * 2)
+  const cellMargins = 8; // margin: 4 on each cell (4 * 2)
+
+  // Divide by 7 days to get the perfect square size
+  const squareSize =
+    Math.floor((screenWidth - cardMargins - cardPadding) / 7) - cellMargins;
 
   return (
     <View style={styles.attendanceCard}>
@@ -63,7 +72,10 @@ export default function AttendanceGrid({
               {dayLabels.map((label, i) => (
                 <Text
                   key={i}
-                  style={[styles.dayLabelText, {width: squareSize}]}>
+                  style={[
+                    styles.dayLabelText,
+                    {width: squareSize, marginHorizontal: 4},
+                  ]}>
                   {label}
                 </Text>
               ))}
@@ -97,26 +109,26 @@ export default function AttendanceGrid({
                 const attendedCount = dayData?.count || 0;
                 const totalForDay = dayData?.total || 0; // Standard daily count
 
+                const isMissedClass = totalForDay > 0 && attendedCount === 0;
+
                 // 2. Color Scaling Logic
                 const densityColors = [
-                  '#F9F9F9',
-                  '#BBDEFB',
-                  '#64B5F6',
-                  '#2196F3',
-                  '#1565C0',
+                  '#FAFAFA', // 0 (Default empty)
+                  '#BBDEFB', // 1 lecture
+                  '#64B5F6', // 2 lectures
+                  '#2196F3', // 3 lectures
+                  '#1565C0', // 4+ lectures
                 ];
                 const colorIndex = Math.min(attendedCount, 4);
 
-                // 3. Style Selection Priority
-                let backgroundColor = densityColors[0]; // Default Empty
-                let textColor = '#757575'; // Default Gray text
-
-                if (attendedCount > 0) {
-                  backgroundColor = densityColors[colorIndex];
-                  textColor = attendedCount > 2 ? '#FFF' : '#2196F3'; // Contrast logic
-                } else if (isHoliday || isSunday) {
-                  backgroundColor = '#EEEEEE'; // 🎯 Distinct Gray for Holidays/Sundays
-                  textColor = '#BDBDBD';
+                // Determine final background color
+                let cellBgColor = '#FAFAFA'; // Default no class
+                if (isHoliday) {
+                  cellBgColor = '#F1F1F1';
+                } else if (isMissedClass) {
+                  cellBgColor = '#FFEBEE'; // 🔴 LIGHT RED FOR MISSED CLASSES
+                } else if (totalForDay > 0) {
+                  cellBgColor = densityColors[colorIndex];
                 }
 
                 return (
@@ -127,26 +139,33 @@ export default function AttendanceGrid({
                       {
                         width: squareSize,
                         height: squareSize,
-                        backgroundColor: backgroundColor,
+                        backgroundColor: cellBgColor,
                         position: 'relative',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        paddingVertical: 2,
                       },
                     ]}>
                     {/* Day Number */}
-                    <Text style={[styles.dayNumber, {color: textColor}]}>
+                    <Text
+                      style={[
+                        styles.dayNumber,
+                        colorIndex > 2 ? {color: '#FFF'} : {},
+                        isHoliday ? styles.dayNumberHoliday : {},
+                        isMissedClass
+                          ? {color: '#D32F2F', fontWeight: 'bold'}
+                          : {}, // Make date text dark red
+                      ]}>
                       {day}
                     </Text>
 
-                    {/* 4. The Quantitative Indicator ("1/5") */}
-                    {attendedCount > 0 && (
+                    {/* 4. Show fraction for ANY day that had a class, even if it's 0/1 */}
+                    {totalForDay > 0 && (
                       <Text
                         style={[
                           styles.densityText,
-                          {
-                            color:
-                              attendedCount > 2
-                                ? 'rgba(255,255,255,0.8)'
-                                : '#2196F3',
-                          },
+                          colorIndex > 2 ? {color: '#FFF'} : {color: '#555'},
+                          isMissedClass ? {color: '#D32F2F'} : {}, // Make fraction dark red
                         ]}>
                         {attendedCount}/{totalForDay}
                       </Text>
@@ -216,6 +235,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'flex-start',
+    width: '100%',
   },
   dayNumber: {
     fontSize: 12,
@@ -233,6 +253,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F1F1F1',
   },
   calendarCell: {
+    // Keeps the cells perfectly square
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
@@ -242,16 +263,19 @@ const styles = StyleSheet.create({
   },
   absentCell: {backgroundColor: '#FAFAFA'},
   attendedCell: {backgroundColor: '#4CAF50', borderColor: '#4CAF50'},
-  
+
   dayNumberAttended: {color: '#FFF'},
-  
+
   dayNumberHoliday: {
     color: '#BDBDBD',
     fontSize: 10,
     fontWeight: '400',
   },
-
-  statsView: {height: 160, justifyContent: 'center', alignItems: 'center'},
+  statsView: {
+    paddingVertical: 20, // Replaced hardcoded height: 160
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   statRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',

@@ -105,7 +105,6 @@ export default function AcademicReports({teacherId, onBack}: any) {
       fetchSessionHistory(item.subject_id);
     }
   };
-
   const renderSubjectReport = (item: any) => {
     const hasSessions = item.total_sessions_held > 0;
     const totalPossible =
@@ -248,6 +247,7 @@ export default function AcademicReports({teacherId, onBack}: any) {
                         }}>
                         Session Timing
                       </Text>
+
                       <View style={styles.sessionDateBox}>
                         <Calendar size={14} color="#757575" />
                         <Text style={styles.sessionDate}>
@@ -255,25 +255,54 @@ export default function AcademicReports({teacherId, onBack}: any) {
                             'en-GB',
                           )}
                         </Text>
-                        <Text
+
+                        <View
                           style={{
-                            fontSize: 12,
-                            color: '#757575',
+                            flexDirection: 'row',
+                            alignItems: 'center',
                             marginLeft: 8,
                           }}>
-                          {/* 🎯 Displays "Start Time - End Time" */}
-                          {new Date(session.created_at).toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                          {' - '}
-                          {session.closed_at
-                            ? new Date(session.closed_at).toLocaleTimeString(
-                                [],
-                                {hour: '2-digit', minute: '2-digit'},
-                              )
-                            : 'N/A'}
-                        </Text>
+                          <Text style={{fontSize: 12, color: '#757575'}}>
+                            {new Date(session.created_at).toLocaleTimeString(
+                              [],
+                              {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              },
+                            )}
+                            {/* Only show the end time if the session is closed */}
+                            {session.closed_at &&
+                              ' - ' +
+                                new Date(session.closed_at).toLocaleTimeString(
+                                  [],
+                                  {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  },
+                                )}
+                          </Text>
+
+                          {/* Clean Ongoing badge right next to the start time */}
+                          {!session.closed_at && (
+                            <View
+                              style={{
+                                backgroundColor: '#FFEBEE',
+                                paddingHorizontal: 4,
+                                paddingVertical: 2,
+                                borderRadius: 4,
+                                marginLeft: 6,
+                              }}>
+                              <Text
+                                style={{
+                                  color: '#D32F2F',
+                                  fontSize: 9,
+                                  fontWeight: 'bold',
+                                }}>
+                                ONGOING
+                              </Text>
+                            </View>
+                          )}
+                        </View>
                       </View>
                     </View>
 
@@ -286,7 +315,10 @@ export default function AcademicReports({teacherId, onBack}: any) {
                       <View style={styles.sessionCountBadge}>
                         <Users size={12} color="#2196F3" />
                         <Text style={styles.sessionCountText}>
-                          {session.attendance[0].count} Present
+                          {/* Use optional chaining safely and point to selectedSubject for the total */}
+                          {session.attendance?.[0]?.count || 0}/
+                          {selectedSubject?.expected_students_per_class || 0}{' '}
+                          Present
                         </Text>
                       </View>
                     </View>

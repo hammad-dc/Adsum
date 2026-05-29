@@ -132,7 +132,7 @@ export default function ManualOverride({
 
     if (visible) fetchData();
     return () => backHandler.remove();
-  }, [visible, onClose]);
+  }, [visible]);
 
   // 2. MARK PRESENT (Bulk)
   const submitMarkPresent = async () => {

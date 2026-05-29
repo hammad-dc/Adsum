@@ -117,21 +117,30 @@ export default function StudentDashboard({session, onNavigate}: any) {
         .eq('target_semester', profile.semester)
         .or(`target_batch.eq.ALL,target_batch.eq.${profile.batch}`);
 
+      // Helper function to safely convert UTC timestamp to local YYYY-MM-DD
+      const getLocalDateString = (utcString: string) => {
+        const dateObj = new Date(utcString);
+        const yyyy = dateObj.getFullYear();
+        const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const dd = String(dateObj.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      };
       const finalMap: any = {};
 
       sessData?.forEach(s => {
-        const date = s.created_at.split('T')[0];
+        const date = getLocalDateString(s.created_at); // Timezone safe
         if (!finalMap[date]) finalMap[date] = {attended: 0, held: 0};
         finalMap[date].held += 1;
       });
 
       attData?.forEach(a => {
-        const date = a.marked_at.split('T')[0];
+        const date = getLocalDateString(a.marked_at); // Timezone safe
         if (!finalMap[date]) finalMap[date] = {attended: 0, held: 0};
         finalMap[date].attended += 1;
-        // Ensure denominator is never smaller than numerator
-        if (finalMap[date].attended > finalMap[date].held)
+        
+        if (finalMap[date].attended > finalMap[date].held) {
           finalMap[date].held = finalMap[date].attended;
+        }
       });
 
       const formattedData = Object.keys(finalMap).map(date => ({

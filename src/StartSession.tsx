@@ -10,6 +10,8 @@ import {
   BackHandler,
   ActivityIndicator,
   Modal,
+  Dimensions,
+  StatusBar,
 } from 'react-native';
 import {manager, requestBluetoothPermissions} from './lib/ble';
 import {
@@ -22,16 +24,19 @@ import {
   Info,
 } from 'lucide-react-native';
 import Svg, {Circle} from 'react-native-svg';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import BLEAdvertiser from 'react-native-ble-advertiser';
 import Geolocation from 'react-native-geolocation-service';
 import {supabase} from './lib/supabase';
 import ManualOverride from './ManualOverride';
 
+const {width: SCREEN_WIDTH} = Dimensions.get('window');
 const APP_UUID = '0000AD50-0000-1000-8000-00805F9B34FB';
 
 export default function StartSession({classSession, onBack, onNavigate}: any) {
   // Inside export default function StartSession
-  const [loading, setLoading] = useState(false); // ✅ Added missing state
+  const insets = useSafeAreaInsets();
+  const [loading, setLoading] = useState(false);
   const [sessionStarted, setSessionStarted] = useState(false);
   const [className, setClassName] = useState(
     classSession?.class_name || classSession?.name || 'Loading Class...',
@@ -41,7 +46,7 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
   );
   const [beaconActive, setBeaconActive] = useState(false);
   const [currentCode, setCurrentCode] = useState(
-    classSession?.active_code || '4892',
+    classSession?.active_code || '----',
   );
   const [codeExpiry, setCodeExpiry] = useState(0);
   const [timerRunning, setTimerRunning] = useState(false);
@@ -50,7 +55,73 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
   const [showManual, setShowManual] = useState(false);
   const [showBatchPicker, setShowBatchPicker] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState('ALL');
-  const [isHardwareRequired, setIsHardwareRequired] = useState(true);
+
+  const updateLocation = () => {
+    Geolocation.getCurrentPosition(
+      pos => {
+        supabase
+          .from('sessions')
+          .update({
+            gps_lat: pos.coords.latitude,
+            gps_long: pos.coords.longitude,
+          })
+          .eq('id', classSession.id)
+          .then();
+      },
+      err => console.log('GPS ERROR:', err),
+      {enableHighAccuracy: true, timeout: 15000, maximumAge: 0},
+    );
+  };
+
+  const startBroadcast = async () => {
+    try {
+      setLoading(true); // 🎯 Show loading state while hardware starts
+      console.log('1. Loading started, requesting permissions...');
+      // 1. Double check permissions first
+      const granted = await requestBluetoothPermissions();
+      console.log('2. Permissions resolved! Granted:', granted);
+      
+      if (!granted) throw new Error('Permissions missing');
+
+      // 2. Stop any existing broadcast safely
+      await BLEAdvertiser.stopBroadcast().catch(() => {});
+
+      // 3. 🎯 CRITICAL: Give Android hardware a second to breathe
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      const major = Math.floor(classSession.id / 65536);
+      const minor = classSession.id % 65536;
+
+      BLEAdvertiser.setCompanyId(0xff);
+      await BLEAdvertiser.broadcast(APP_UUID, [major, minor], {
+        advertiseMode: 1,
+        txPowerLevel: 3,
+        connectable: false,
+        includeDeviceName: false,
+      });
+
+      console.log('Broadcast active');
+      setBeaconActive(true);
+      updateLocation(); //
+    } catch (e: any) {
+      console.log('Broadcast Error:', e);
+      setBeaconActive(false);
+      // 🎯 If it fails, give a more specific alert
+      Alert.alert(
+        'Signal Error',
+        'Please toggle your Bluetooth OFF and then ON again to reset the adapter.',
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const stopBroadcast = async () => {
+    try {
+      await BLEAdvertiser.stopBroadcast();
+      setBeaconActive(false);
+    } catch (e) {}
+  };
 
   const initialize = async () => {
     const {data: sessData, error} = await supabase
@@ -118,74 +189,18 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
       .eq('session_id', classSession.id);
     setAttendeeCount(present || 0);
 
-    const {count: total} = await supabase
+    const activeSemester = classSession.target_semester;
+    const query = supabase
       .from('profiles')
       .select('*', {count: 'exact', head: true})
-      .eq('role', 'student');
-    setTotalStudents(total || 0);
-  };
+      .eq('role', 'student')
+      .eq('semester', activeSemester);
 
-  const updateLocation = () => {
-    Geolocation.getCurrentPosition(
-      pos => {
-        supabase
-          .from('sessions')
-          .update({
-            gps_lat: pos.coords.latitude,
-            gps_long: pos.coords.longitude,
-          })
-          .eq('id', classSession.id)
-          .then();
-      },
-      err => console.log('GPS ERROR:', err),
-      {enableHighAccuracy: true},
-    );
-  };
-
-  const startBroadcast = async () => {
-    try {
-      setLoading(true); // 🎯 Show loading state while hardware starts
-      console.log('Preparing hardware...');
-
-      // 1. Double check permissions first
-      const granted = await requestBluetoothPermissions();
-      if (!granted) throw new Error('Permissions missing');
-
-      // 2. Stop any existing broadcast safely
-      await BLEAdvertiser.stopBroadcast().catch(() => {});
-
-      // 3. 🎯 CRITICAL: Give Android hardware a second to breathe
-      await new Promise(resolve => setTimeout(resolve, 800));
-
-      BLEAdvertiser.setCompanyId(0xff);
-      await BLEAdvertiser.broadcast(APP_UUID, [12, 34], {
-        advertiseMode: 1,
-        txPowerLevel: 3,
-        connectable: false,
-        includeDeviceName: false,
-      });
-
-      console.log('Broadcast active');
-      setBeaconActive(true);
-      updateLocation(); //
-    } catch (e: any) {
-      console.log('Broadcast Error:', e);
-      setBeaconActive(false);
-      // 🎯 If it fails, give a more specific alert
-      Alert.alert(
-        'Signal Error',
-        'Please toggle your Bluetooth OFF and then ON again to reset the adapter.',
-      );
-    } finally {
-      setLoading(false);
+    if (selectedBatch !== 'ALL') {
+      query.eq('batch', selectedBatch);
     }
-  };
-
-  const stopBroadcast = async () => {
-    try {
-      await BLEAdvertiser.stopBroadcast();
-      setBeaconActive(false);
-    } catch (e) {}
+    const {count: total} = await query;
+    setTotalStudents(total || 0);
   };
 
   const handleStartClass = () => {
@@ -284,7 +299,7 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
             setIsAdHoc(false);
             Alert.alert('GPS Error', 'Using Fixed Mode instead.');
           },
-          {enableHighAccuracy: true, timeout: 10000},
+          {enableHighAccuracy: true, timeout: 15000, maximumAge: 0},
         );
       } else {
         // 🏛️ FIXED MODE: Fetch original room coords from 'classrooms' table
@@ -337,9 +352,9 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
   if (!classSession) return null;
 
   // --- UI Render Calculations ---
-  const CIRCLE_SIZE = 220;
-  const RADIUS = 95;
-  const STROKE_WIDTH = 15;
+  const CIRCLE_SIZE = SCREEN_WIDTH * 0.58;
+  const STROKE_WIDTH = 14;
+  const RADIUS = (CIRCLE_SIZE - STROKE_WIDTH) / 2;
   const circumference = 2 * Math.PI * RADIUS;
   const strokeDashoffset = circumference * (1 - codeExpiry / 120);
   const center = CIRCLE_SIZE / 2; //Autocalculates center
@@ -385,20 +400,16 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
             '⚠️ Signal Lost',
             'Your Bluetooth was turned off. Students can no longer verify their location.',
           );
-        }
-
-        if (state === 'PoweredOn') {
-          console.log('Hardware recovered. Re-starting broadcast...');
-          // 🎯 We call startBroadcast which already has the 800ms "breath" delay
+        } else if (state === 'PoweredOn' && !loading) {
+          // Only attempt a restart if we aren't already stuck in a loading state
           startBroadcast();
         }
       }
-    }, true);
-
+    });
     return () => subscription.remove();
   }, [beaconActive, sessionStarted]); // 🚀 Runs every time the toggle changes
-  // --- 1. Main Initialization Effect (Runs Once) ---
 
+  // --- 1. Main Initialization Effect (Runs Once) ---
   useEffect(() => {
     if (!classSession?.id) return;
 
@@ -459,8 +470,8 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
 
   return (
     <View style={styles.container}>
-      {/* ---------------- SLIM HEADER ---------------- */}
-      <View style={styles.header}>
+      {/* ---------------- HEADER ---------------- */}
+      <View style={[styles.header, {paddingTop: insets.top + 16}]}>
         <View style={styles.headerTop}>
           <TouchableOpacity onPress={onBack} style={{padding: 5}}>
             <ArrowLeft color="#FFF" size={32} />
@@ -673,12 +684,7 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
             </Svg>
 
             {/* CENTER CONTENT: Where the magic happens */}
-            <View
-              style={{
-                position: 'absolute',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}>
+            <View style={styles.absoluteCenter}>
               {!sessionStarted ? (
                 <>
                   <Text style={styles.startLabel}>TAP TO</Text>
@@ -839,16 +845,13 @@ const styles = StyleSheet.create({
   // --- HEADER (SLIMMED DOWN) ---
   header: {
     backgroundColor: '#2196F3',
-    flexDirection: 'row', // Align items side-by-side
-    alignItems: 'center', // Center vertically
-    paddingTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingBottom: 16,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
     elevation: 4,
-    zIndex: 1,
-    overflow: 'hidden',
   },
   headerTop: {
     marginBottom: 0, // Removed gap between arrow and text
@@ -887,6 +890,13 @@ const styles = StyleSheet.create({
   centerCard: {
     alignItems: 'center',
   },
+  absoluteCenter: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    height: '100%', // 🎯 Forces perfect vertical/horizontal centering
+  },
 
   // --- ROW HELPERS ---
   row: {
@@ -924,8 +934,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   codeText: {
-    fontSize: 38,
-    fontWeight: 'bold',
+    fontSize: SCREEN_WIDTH * 0.12,
+    fontWeight: '900',
     color: '#2196F3',
     letterSpacing: 1,
   },

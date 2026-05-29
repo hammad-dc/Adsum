@@ -64,8 +64,8 @@ export default function TeacherDashboard({
     try {
       const {count: historyCount, error: countErr} = await supabase
         .from('sessions')
-        .select('*', {count: 'exact', head: true}) 
-        .eq('teacher_id', teacher.id); 
+        .select('*', {count: 'exact', head: true})
+        .eq('teacher_id', teacher.id);
 
       if (countErr) throw countErr;
       setTotalSessions(historyCount || 0);
@@ -223,6 +223,8 @@ export default function TeacherDashboard({
               active_code: item.active_code,
               is_active: item.is_active,
               closed_at: item.closed_at,
+              target_semester: item.target_semester,
+              target_batch: item.target_batch,
             })
           }>
           <Text

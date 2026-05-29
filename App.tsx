@@ -13,8 +13,9 @@ import AttendanceHistory from './src/AttendanceHistory';
 import Profile from './src/Profile';
 import ManualOverride from './src/ManualOverride';
 import AcademicReports from './src/AcademicReport';
+import {SafeAreaProvider} from 'react-native-safe-area-context';
 
-export default function App() {
+function MainApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<'student' | 'teacher' | null>(null);
@@ -167,3 +168,12 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {flex: 1, justifyContent: 'center', alignItems: 'center'},
 });
+
+// 🎯 This is your new Root Component
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <MainApp />
+    </SafeAreaProvider>
+  );
+}

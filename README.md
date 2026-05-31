@@ -1,81 +1,141 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Adsum
 
-# Getting Started
+## About The Project
+Adsum is a Bring Your Own Device (BYOD) educational ERP and attendance system designed to eliminate the inefficiencies and security vulnerabilities of traditional roll calls. By leveraging the smartphones that students and faculty already carry, Adsum replaces expensive, dedicated biometric scanners with a highly secure, multi-layered software handshake. 
 
->**Note**: Make sure you have completed the [React Native - Environment Setup](https://reactnative.dev/docs/environment-setup) instructions till "Creating a new application" step, before proceeding.
+The system is built on a dynamic denominator architecture, allowing it to adapt to complex college scheduling environments involving multi-branch courses, practical batches, and ad-hoc lecture changes.
 
-## Step 1: Start the Metro Server
+## Key Features
 
-First, you will need to start **Metro**, the JavaScript _bundler_ that ships _with_ React Native.
+### Multi-Layered Security Protocol
+Adsum ensures physical presence through four concurrent verification layers:
+* **Proximity (BLE):** The faculty device acts as a local beacon, broadcasting a dynamically generated, session-specific payload. Student devices must intercept this specific signal to prove they are in the correct room.
+* **Location (GPS Geofencing):** Verifies the student is strictly within a defined radius of the static classroom coordinates.
+* **Time (Rolling TOTP):** A 4-digit OTP rotates every 45 seconds on the teacher's dashboard, nullifying distance-based code sharing.
+* **Hardware ID Binding:** At registration, the system captures and binds the student's primary device ID to their profile. If a different device is used, the system flags the transaction for manual review.
 
-To start Metro, run the following command from the _root_ of your React Native project:
+### Role-Aware ERP Architecture
+* **Faculty Isolation:** Dashboards are populated using relational bridge tables. Teachers only manage sessions for subjects explicitly assigned to them, preventing accidental cross-department scheduling.
+* **Cohort Filtering:** Theory lectures broadcast to the entire class, while lab practicals enforce strict batch-level routing (e.g., Batch A only), ensuring students only see relevant active sessions.
 
-```bash
-# using npm
-npm start
+### Advanced Academic Analytics
+* **Mathematical Attendance Grid:** A custom, responsive contribution graph visualizes attendance density. Dark blue indicates perfect attendance for the day, light blue indicates partial attendance, and red highlights completely missed classes.
+* **Server-Side Computation:** Complex subject-wise attendance percentages and dynamic denominator scaling are offloaded to PostgreSQL Remote Procedure Calls (RPCs), optimizing client-side performance.
 
-# OR using Yarn
-yarn start
+## Built With
+* React Native (CLI)
+* Supabase (PostgreSQL, Auth, Realtime)
+* react-native-ble-advertiser
+* react-native-geolocation-service
+* react-native-device-info
+* react-native-svg
+
+## Live Demo & Download
+You can download the compiled Android APK directly to test the application on your physical device.
+* [Download Adsum APK (Google Drive)](#) - *Add your link here*
+
+A video demonstration showcasing the Bluetooth and GPS handshake architecture in real-time is available below.
+* [Watch the Handshake Demo](#) - *Add your video link here*
+
+## Getting Started
+To get a local copy up and running on your PC, follow these simple steps.
+
+### Prerequisites
+You will need the standard React Native CLI development environment setup for Android.
+* Node.js
+* Android Studio (with an Android Emulator running API 33 or 34)
+* Java Development Kit (JDK)
+
+### Installation
+1. Clone the repo
+   ```bash
+   git clone [https://github.com/your_username/Adsum.git](https://github.com/your_username/Adsum.git)
+
+
+
+
+Here is the structured README for your repository, formatted professionally and keeping the features concise and impactful.
+
+```markdown
+# Adsum
+
+## About The Project
+Adsum is a Bring Your Own Device (BYOD) educational ERP and attendance system designed to eliminate the inefficiencies and security vulnerabilities of traditional roll calls. By leveraging the smartphones that students and faculty already carry, Adsum replaces expensive, dedicated biometric scanners with a highly secure, multi-layered software handshake. 
+
+The system is built on a dynamic denominator architecture, allowing it to adapt to complex college scheduling environments involving multi-branch courses, practical batches, and ad-hoc lecture changes.
+
+## Key Features
+
+### Multi-Layered Security Protocol
+Adsum ensures physical presence through four concurrent verification layers:
+* **Proximity (BLE):** The faculty device acts as a local beacon, broadcasting a dynamically generated, session-specific payload. Student devices must intercept this specific signal to prove they are in the correct room.
+* **Location (GPS Geofencing):** Verifies the student is strictly within a defined radius of the static classroom coordinates.
+* **Time (Rolling TOTP):** A 4-digit OTP rotates every 45 seconds on the teacher's dashboard, nullifying distance-based code sharing.
+* **Hardware ID Binding:** At registration, the system captures and binds the student's primary device ID to their profile. If a different device is used, the system flags the transaction for manual review.
+
+### Role-Aware ERP Architecture
+* **Faculty Isolation:** Dashboards are populated using relational bridge tables. Teachers only manage sessions for subjects explicitly assigned to them, preventing accidental cross-department scheduling.
+* **Cohort Filtering:** Theory lectures broadcast to the entire class, while lab practicals enforce strict batch-level routing (e.g., Batch A only), ensuring students only see relevant active sessions.
+
+### Advanced Academic Analytics
+* **Mathematical Attendance Grid:** A custom, responsive contribution graph visualizes attendance density. Dark blue indicates perfect attendance for the day, light blue indicates partial attendance, and red highlights completely missed classes.
+* **Server-Side Computation:** Complex subject-wise attendance percentages and dynamic denominator scaling are offloaded to PostgreSQL Remote Procedure Calls (RPCs), optimizing client-side performance.
+
+## Built With
+* React Native (CLI)
+* Supabase (PostgreSQL, Auth, Realtime)
+* react-native-ble-advertiser
+* react-native-geolocation-service
+* react-native-device-info
+* react-native-svg
+
+## Live Demo & Download
+You can download the compiled Android APK directly to test the application on your physical device.
+* [Download Adsum APK (Google Drive)](#) - *Add your link here*
+
+A video demonstration showcasing the Bluetooth and GPS handshake architecture in real-time is available below.
+* [Watch the Handshake Demo](#) - *Add your video link here*
+
+## Getting Started
+To get a local copy up and running on your PC, follow these simple steps.
+
+### Prerequisites
+You will need the standard React Native CLI development environment setup for Android.
+* Node.js
+* Android Studio (with an Android Emulator running API 33 or 34)
+* Java Development Kit (JDK)
+
+### Installation
+1. Clone the repo
+   ```bash
+   git clone [https://github.com/your_username/Adsum.git](https://github.com/your_username/Adsum.git)
+
+2. Install NPM packages
+npm install
+
+
+
+3. Set up your environment variables
+Create a `.env` file in the root directory and add your Supabase keys:
+```text
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_ANON_KEY=your_supabase_publishable_key
+
 ```
 
-## Step 2: Start your Application
 
-Let Metro Bundler run in its _own_ terminal. Open a _new_ terminal from the _root_ of your React Native project. Run the following command to start your _Android_ or _iOS_ app:
-
-### For Android
-
+4. Start the Metro Bundler (Clear cache for fresh environment variables)
 ```bash
-# using npm
-npm run android
+npm start -- --reset-cache
 
-# OR using Yarn
-yarn android
 ```
 
-### For iOS
 
+5. Build and run the app on your emulator or connected device
 ```bash
-# using npm
-npm run ios
+npx react-native run-android
 
-# OR using Yarn
-yarn ios
 ```
 
-If everything is set up _correctly_, you should see your new app running in your _Android Emulator_ or _iOS Simulator_ shortly provided you have set up your emulator/simulator correctly.
-
-This is one way to run your app — you can also run it directly from within Android Studio and Xcode respectively.
-
-## Step 3: Modifying your App
-
-Now that you have successfully run the app, let's modify it.
-
-1. Open `App.tsx` in your text editor of choice and edit some lines.
-2. For **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Developer Menu** (<kbd>Ctrl</kbd> + <kbd>M</kbd> (on Window and Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (on macOS)) to see your changes!
-
-   For **iOS**: Hit <kbd>Cmd ⌘</kbd> + <kbd>R</kbd> in your iOS Simulator to reload the app and see your changes!
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [Introduction to React Native](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you can't get this to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
 
 

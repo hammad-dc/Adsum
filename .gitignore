@@ -66,6 +66,7 @@ yarn-error.log
 /coverage
 
 #file to protect the Supabase api key
-src/keys.ts
+.env
 
 for_gemini.md
+Adsum_context.md

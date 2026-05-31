@@ -18,6 +18,7 @@ import {
   CheckCircle,
   XCircle,
   AlertTriangle,
+  Info,
 } from 'lucide-react-native';
 import {supabase} from './lib/supabase';
 
@@ -227,11 +228,21 @@ export default function ManualOverride({
             )}
 
             {/* ⚠️ Proxy Flag appears directly UNDER the Verified status */}
+            {/* Proxy Flag as an Interactive Info Button */}
             {item.isProxySuspected && (
-              <View style={[styles.proxyBadge, {marginRight: 0, marginTop: 2}]}>
-                <AlertTriangle size={12} color="#FF9800" />
+              <TouchableOpacity 
+                style={[styles.proxyBadge, {marginRight: 0, marginTop: 2}]}
+                onPress={() => {
+                  Alert.alert(
+                    'Proxy Suspected',
+                    'This attendance was marked from an unrecognized device. Please check with the student to verify their presence.',
+                    [{ text: 'Understood', style: 'default' }]
+                  );
+                }}
+              >
+                <Info size={16} color="#FF9800" />
                 <Text style={styles.proxyText}>Proxy?</Text>
-              </View>
+              </TouchableOpacity>
             )}
           </View>
         </View>

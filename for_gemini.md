@@ -1,277 +1,404 @@
-# This is my attendance grid code 
-import React, {useState} from 'react';
+# here are the two columns from attendance table
+## here the proxy suspected thing is not working i guess cause in the 63 i did proxy from other device which isnt reflected here but in real ui it is shown proxy also i want to make it an info button this lecture could be a proxy we need to tell the teacher to like talk with student the system works fine i guess also i required we have to correct this attendance table
+id,session_id,student_id,status,verification_method,gps_lat,gps_long,marked_at,bluetooth_verified,location_verified,device_id,is_proxy_suspected
+63,46,a21e3bf5-4426-4c86-9a04-9b7188e16179,present,code_only,,,2026-05-30 19:04:26.215961+00,true,true,178cf8426ae8f876,false
+64,45,a21e3bf5-4426-4c86-9a04-9b7188e16179,present,code_only,,,2026-05-30 19:06:16.665095+00,true,true,85bbdbbc0611abb1,false
+# This is my manual override code 
+import React, {useState, useEffect} from 'react';
 import {
   View,
   Text,
   StyleSheet,
+  FlatList,
   TouchableOpacity,
-  Dimensions,
+  Image,
+  TextInput,
+  Alert,
+  ActivityIndicator,
+  Modal,
+  BackHandler,
 } from 'react-native';
+import {
+  ArrowLeft,
+  Search,
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
+} from 'lucide-react-native';
+import {supabase} from './lib/supabase';
 
-export default function AttendanceGrid({
-  heatmapData,
-  holidays,
-  attendancePercentage,
-  totalAttended,
-  totalLectures,
+export default function ManualOverride({
+  visible,
+  onClose,
+  classSession,
+  onUpdate,
+  onBack,
 }: any) {
-  const [isFlipped, setIsFlipped] = useState(false);
+  const [students, setStudents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const currentDate = new Date();
-  const currentMonth = currentDate.getMonth();
-  const currentYear = currentDate.getFullYear();
-  const monthNames = [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
-  ];
+  // 1. Fetch Data
+  // --- 1. REFACTORED: SAFE DATA ACCESS ---
+  // --- REFACTORED FOR ARRAY ACCESS ---
+  const fetchData = async () => {
+    try {
+      setLoading(true);
 
-  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-  const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay(); // Sunday = 0
-  const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+      const {data: currentSession, error: sessionError} = await supabase
+        .from('sessions')
+        .select(
+          `
+        target_batch,
+        subjects!inner (
+          target_course,
+          target_year,
+          target_semester
+        )
+      `,
+        )
+        .eq('id', classSession.id)
+        .single();
 
-  // Logic: (ScreenWidth - CardMargins - CardPadding - (7 * 2 * Margin)) / 7
-  // Get screen width
-  const screenWidth = Dimensions.get('window').width;
+      if (sessionError || !currentSession) {
+        console.error('Session fetch error:', sessionError);
+        return;
+      }
 
-  // Calculate exact available space
-  const cardMargins = 32; // marginHorizontal: 16 (16 * 2)
-  const cardPadding = 40; // padding: 20 inside the card (20 * 2)
-  const cellMargins = 8; // margin: 4 on each cell (4 * 2)
+      // Access the first element of the subjects array
+      // Supabase often returns joins as arrays unless strictly typed otherwise
+      const subjectData = Array.isArray(currentSession.subjects)
+        ? currentSession.subjects[0]
+        : currentSession.subjects;
 
-  // Divide by 7 days to get the perfect square size
-  const squareSize =
-    Math.floor((screenWidth - cardMargins - cardPadding) / 7) - cellMargins;
+      if (!subjectData) {
+        console.error('No subject data found for this session');
+        return;
+      }
+
+      let studentQuery = supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'student')
+        .eq('course', subjectData.target_course) // Accessing properties safely
+        .eq('year', subjectData.target_year) // Accessing properties safely
+        .eq('semester', subjectData.target_semester); // Accessing properties safely
+
+      if (currentSession.target_batch !== 'ALL') {
+        studentQuery = studentQuery.eq('batch', currentSession.target_batch);
+      }
+
+      const {data: allStudents} = await studentQuery.order('name');
+      const {data: present} = await supabase
+        .from('attendance')
+        .select('student_id, device_id') // Added device_id for security checks
+        .eq('session_id', classSession.id);
+
+      // E. Map attendance status and flag suspected proxies
+      const presentMap = new Map(
+        present?.map(p => [p.student_id, p.device_id]),
+      );
+
+      const list =
+        allStudents?.map(s => ({
+          ...s,
+          isPresent: presentMap.has(s.id),
+          // Flag if the device used doesn't match the student's primary device
+          isProxySuspected:
+            presentMap.has(s.id) &&
+            s.primary_device_id !== (presentMap.get(s.id) || ''),
+        })) || [];
+      setStudents(list);
+
+      // ... rest of your mapping logic ...
+    } catch (err) {
+      console.error('Manual Override Fetch Error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const backAction = () => {
+      if (visible) {
+        // 🎯 Use 'onClose' instead of 'onBack'
+        if (onClose) {
+          onClose();
+          return true; // Prevents the app from closing
+        }
+      }
+      return false;
+    };
+    // 2. Register the listener
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction,
+    );
+
+    if (visible) fetchData();
+    return () => backHandler.remove();
+  }, [visible]);
+
+  // 2. MARK PRESENT (Bulk)
+  const submitMarkPresent = async () => {
+    if (selectedIds.size === 0) return;
+    try {
+      const records = Array.from(selectedIds).map(studentId => ({
+        session_id: classSession.id,
+        student_id: studentId,
+        status: 'present',
+        verification_method: 'manual',
+      }));
+
+      await supabase.from('attendance').insert(records);
+
+      Alert.alert('Success', `Marked ${selectedIds.size} students present.`);
+      setSelectedIds(new Set()); // Clear selection
+      fetchData(); // Refresh list
+      if (onUpdate) onUpdate(); // Update the main screen count!
+    } catch (err: any) {
+      Alert.alert('Error', err.message);
+    }
+  };
+
+  // 3. REMOVE STUDENT (Specific Action)
+  const removeStudent = async (studentId: string, name: string) => {
+    Alert.alert(
+      'Revoke Attendance?',
+      `Are you sure you want to mark ${name} as Absent/Suspicious?`,
+      [
+        {text: 'Cancel', style: 'cancel'},
+        {
+          text: 'Mark Absent',
+          style: 'destructive',
+          onPress: async () => {
+            await supabase
+              .from('attendance')
+              .delete()
+              .eq('session_id', classSession.id)
+              .eq('student_id', studentId);
+            fetchData(); // Refresh UI
+            if (onUpdate) onUpdate(); // Update main screen
+          },
+        },
+      ],
+    );
+  };
+
+  const toggleSelection = (id: string) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setSelectedIds(newSet);
+  };
+
+  const renderItem = ({item}: any) => {
+    const isSelected = selectedIds.has(item.id); //
+
+    return (
+      <View style={styles.card}>
+        <View style={[styles.row, {alignItems: 'flex-start'}]}>
+          <Image
+            source={{
+              uri: `https://api.dicebear.com/9.x/initials/png?seed=${item.name}`,
+            }}
+            style={[styles.avatar, {marginTop: 5}]} //
+          />
+
+          {/* 🎯 Name Section - No more truncating */}
+          <View style={{flex: 1, marginRight: 10}}>
+            <Text style={styles.name}>{item.name}</Text>
+            <Text style={styles.subText}>{item.student_id}</Text>
+          </View>
+
+          {/* 🎯 Badge Column - Stacked Vertically */}
+          <View style={{alignItems: 'flex-end', gap: 4, minWidth: 90}}>
+            {item.isPresent ? (
+              <TouchableOpacity
+                style={styles.verifiedBadge}
+                onPress={() => removeStudent(item.id, item.name)} //
+              >
+                <CheckCircle size={16} color="#4CAF50" />
+                <Text style={styles.verifiedText}>Verified</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity onPress={() => toggleSelection(item.id)}>
+                {isSelected ? (
+                  <CheckCircle size={24} color="#2196F3" />
+                ) : (
+                  <View style={styles.circle} />
+                )}
+              </TouchableOpacity>
+            )}
+
+            {/* ⚠️ Proxy Flag appears directly UNDER the Verified status */}
+            {item.isProxySuspected && (
+              <View style={[styles.proxyBadge, {marginRight: 0, marginTop: 2}]}>
+                <AlertTriangle size={12} color="#FF9800" />
+                <Text style={styles.proxyText}>Proxy?</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </View>
+    );
+  };
 
   return (
-    <View style={styles.attendanceCard}>
-      <TouchableOpacity
-        activeOpacity={0.9}
-        onPress={() => setIsFlipped(!isFlipped)}>
-        {!isFlipped ? (
-          <View>
-            <View style={styles.cardHeaderRow}>
-              <Text style={styles.cardTitle}>
-                {monthNames[currentMonth]} Attendance
-              </Text>
-              <View style={styles.monthBadge}>
-                <Text style={styles.monthBadgeText}>{daysInMonth} Days</Text>
-              </View>
-            </View>
-
-            {/* Labels Row */}
-            <View style={styles.dayLabelsRow}>
-              {dayLabels.map((label, i) => (
-                <Text
-                  key={i}
-                  style={[styles.dayLabelText, {width: squareSize, marginHorizontal: 4}]}>
-                  {label}
-                </Text>
-              ))}
-            </View>
-
-            {/* Calendar Grid */}
-            <View style={styles.calendarGrid}>
-              {/* Spacer squares for correct day alignment */}
-              {Array.from({length: firstDayOfMonth}).map((_, i) => (
-                <View
-                  key={`spacer-${i}`}
-                  style={{width: squareSize, height: squareSize, margin: 4}}
-                />
-              ))}
-
-              {Array.from({length: daysInMonth}).map((_, index) => {
-                const day = index + 1;
-                const yearStr = currentYear;
-                const monthStr = String(currentMonth + 1).padStart(2, '0');
-                const dayStr = String(day).padStart(2, '0');
-                const dateStr = `${yearStr}-${monthStr}-${dayStr}`;
-
-                const date = new Date(currentYear, currentMonth, day);
-                const isHoliday = holidays?.includes(dateStr);
-                const isSunday = date.getDay() === 0;
-
-                // 1. Find Data for this day
-                const dayData = heatmapData?.find(
-                  (d: any) => d.date === dateStr,
-                );
-                const attendedCount = dayData?.count || 0;
-                const totalForDay = dayData?.total || 0; // Standard daily count
-
-                // 2. Color Scaling Logic
-                const densityColors = [
-                  '#F9F9F9',
-                  '#BBDEFB',
-                  '#64B5F6',
-                  '#2196F3',
-                  '#1565C0',
-                ];
-                const colorIndex = Math.min(attendedCount, 4);
-
-                // 3. Style Selection Priority
-                let backgroundColor = densityColors[0]; // Default Empty
-                let textColor = '#757575'; // Default Gray text
-
-                if (attendedCount > 0) {
-                  backgroundColor = densityColors[colorIndex];
-                  textColor = attendedCount > 2 ? '#FFF' : '#2196F3'; // Contrast logic
-                } else if (isHoliday || isSunday) {
-                  backgroundColor = '#EEEEEE'; // 🎯 Distinct Gray for Holidays/Sundays
-                  textColor = '#BDBDBD';
-                }
-
-                return (
-                  <View
-                    key={day}
-                    style={[
-                      styles.calendarCell,
-                      {
-                        width: squareSize,
-                        height: squareSize,
-                        backgroundColor: backgroundColor,
-                        position: 'relative',
-                      },
-                    ]}>
-                    {/* Day Number */}
-                    <Text style={[styles.dayNumber, {color: textColor}]}>
-                      {day}
-                    </Text>
-
-                    {/* 4. The Quantitative Indicator ("1/5") */}
-                    {attendedCount > 0 && (
-                      <Text
-                        style={[
-                          styles.densityText,
-                          {
-                            color:
-                              attendedCount > 2
-                                ? 'rgba(255,255,255,0.8)'
-                                : '#2196F3',
-                          },
-                        ]}>
-                        {attendedCount}/{totalForDay}
-                      </Text>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.row}>
+            <TouchableOpacity onPress={onClose}>
+              <ArrowLeft color="#FFF" size={24} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Class Register</Text>
           </View>
-        ) : (
-          <View style={styles.statsView}>
-            <Text style={styles.cardTitle}>Performance Summary</Text>
-            <View style={styles.statRow}>
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{attendancePercentage}%</Text>
-                <Text style={styles.statLabel}>Attendance</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>
-                  {totalAttended}/{totalLectures}
-                </Text>
-                <Text style={styles.statLabel}>Sessions</Text>
-              </View>
-            </View>
+          <View style={styles.searchBox}>
+            <Search size={20} color="#757575" />
+            <TextInput
+              placeholder="Search Name or ID..."
+              style={styles.input}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+        </View>
+
+        <View style={styles.content}>
+          {loading ? (
+            <ActivityIndicator color="#2196F3" />
+          ) : (
+            <FlatList
+              data={students.filter(s =>
+                s.name?.toLowerCase().includes(searchQuery.toLowerCase()),
+              )}
+              renderItem={renderItem}
+              keyExtractor={item => item.id}
+              contentContainerStyle={{paddingBottom: 100}}
+            />
+          )}
+        </View>
+        {selectedIds.size > 0 && (
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={styles.submitButton}
+              onPress={submitMarkPresent}>
+              <Text style={styles.submitText}>
+                Mark {selectedIds.size} Students Present
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
-      </TouchableOpacity>
-    </View>
+      </View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  attendanceCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 20,
+  container: {flex: 1, backgroundColor: '#F5F7FA'},
+  header: {
+    backgroundColor: '#2196F3',
     padding: 20,
-    marginHorizontal: 16,
-    marginTop: -35,
-    elevation: 8,
+    paddingTop: 20,
+    paddingBottom: 15,
   },
-  cardHeaderRow: {
+  headerTitle: {
+    color: '#FFF',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginLeft: 15,
+  },
+  row: {flexDirection: 'row', alignItems: 'center'},
+  searchBox: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 15,
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    marginTop: 15,
+    height: 45,
   },
-  cardTitle: {fontSize: 16, fontWeight: 'bold', color: '#333'},
-  monthBadge: {
-    backgroundColor: '#E3F2FD',
+  input: {flex: 1, marginLeft: 10},
+  content: {flex: 1, padding: 15},
+  card: {
+    backgroundColor: '#FFF',
+    padding: 15,
+    borderRadius: 12,
+    marginBottom: 10,
+    elevation: 1,
+  },
+  avatar: {
+    width: 45,
+    height: 45,
+    borderRadius: 23,
+    backgroundColor: '#EEE',
+    marginRight: 15,
+  },
+  name: {fontSize: 16, fontWeight: 'bold', color: '#333', lineHeight: 22},
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  proxyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3E0',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#FFE0B2',
+    marginLeft: 8,
+  },
+  proxyText: {
+    color: '#E65100',
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginLeft: 4,
+  },
+  subText: {color: '#757575', fontSize: 12},
+  circle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#CCC',
+  },
+
+  // Restored the clean look for verified
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
+    justifyContent: 'center',
   },
-  monthBadgeText: {color: '#2196F3', fontSize: 11, fontWeight: 'bold'},
-  dayLabelsRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    marginBottom: 8,
-  },
-  dayLabelText: {
-    textAlign: 'center',
-    fontSize: 11,
-    color: '#BBB',
-    fontWeight: 'bold',
-    marginHorizontal: 4,
-  },
-  calendarGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'flex-start',
-    width: '100%',
-  },
-  dayNumber: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#757575',
-  },
-  densityText: {
-    fontSize: 7, // Keep it very small
-    fontWeight: 'bold',
+  verifiedText: {fontSize: 12, color: '#4CAF50', fontWeight: 'bold'},
+
+  footer: {
     position: 'absolute',
-    bottom: 2,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 20,
+    backgroundColor: '#FFF',
+    borderTopWidth: 1,
+    borderColor: '#EEE',
   },
-  // Ensure your holiday style matches your new gray
-  holidayCell: {
-    backgroundColor: '#F1F1F1',
-  },
-  calendarCell: { // Keeps the cells perfectly square
-    borderRadius: 8,
-    justifyContent: 'center',
+  submitButton: {
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: '#2196F3',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#F0F0F0',
-    margin: 4,
+    elevation: 3,
   },
-  absentCell: {backgroundColor: '#FAFAFA'},
-  attendedCell: {backgroundColor: '#4CAF50', borderColor: '#4CAF50'},
-
-  dayNumberAttended: {color: '#FFF'},
-
-  dayNumberHoliday: {
-    color: '#BDBDBD',
-    fontSize: 10,
-    fontWeight: '400',
-  },
-  statsView: {
-    paddingVertical: 20, // Replaced hardcoded height: 160
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  statRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-  },
-  statItem: {alignItems: 'center'},
-  statValue: {fontSize: 32, fontWeight: 'bold', color: '#2196F3'},
-  statLabel: {fontSize: 12, color: '#757575'},
+  submitText: {color: '#FFF', fontWeight: 'bold', fontSize: 16},
 });

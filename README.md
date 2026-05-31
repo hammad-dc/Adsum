@@ -79,4 +79,4 @@ Create a `.env` file in the root directory and add your Supabase keys:
 
     ```
 
-
+#### iOS Build Note: This project utilizes custom native modules for BLE and Geofencing. To run on iOS, you must build from source using Xcode and Cocoapods on a macOS environment.

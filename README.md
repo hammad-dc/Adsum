@@ -1,6 +1,5 @@
-<div align="center">
-  <img src="./assets/logo.png" alt="Adsum Logo" width="200"/>
-  
+<div>
+  <img src="./assets/logo.png" alt="Adsum Logo" width="200"/>  
 </div>
 
 ## About The Project
@@ -42,10 +41,10 @@ A video demonstration showcasing the Bluetooth and GPS handshake architecture in
 
 ## Screenshots
 <div align="center">
-  <img src="./assets/Teacher_screen1.jpg" alt="Teacher Dashboard" width="250"/>
-  <img src="./assets/Teacher_screen2.jpg" alt="Teacher Session Control Screen" width="250"/>
-  <img src="./assets/Student_screen1.jpg" alt="Student Dashboard" width="250"/>
-  <img src="./assets/Student_screen2.jpg" alt="Student Mark Attendance Screen" width="250"/>
+  <img src="./assets/Teacher_screen1.jpg" alt="Teacher Dashboard" width="200"/>
+  <img src="./assets/Teacher_screen2.jpg" alt="Teacher Session Control Screen" width="200"/>
+  <img src="./assets/Student_screen1.jpg" alt="Student Dashboard" width="200"/>
+  <img src="./assets/Student_screen2.jpg" alt="Student Mark Attendance Screen" width="200"/>
 </div>
 
 ## Getting Started
@@ -60,7 +59,7 @@ You will need the standard React Native CLI development environment setup for An
 ### Installation
 1. Clone the repo
    ```bash
-   git clone [https://github.com/hammad-dc/Adsum](https://github.com/hammad-dc/Adsum)
+   git clone https://github.com/hammad-dc/Adsum
 
     ```
 

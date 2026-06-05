@@ -1,6 +1,6 @@
 <div align="center">
   <img src="./assets/logo.png" alt="Adsum Logo" width="200"/>
-  <h1>Adsum</h1>
+  
 </div>
 
 ## About The Project

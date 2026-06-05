@@ -38,7 +38,7 @@ export default function AttendanceGrid({
   const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay(); // Sunday = 0
   const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
-  // Logic: (ScreenWidth - CardMargins - CardPadding - (7 * 2 * Margin)) / 7
+
   // Get screen width
   const screenWidth = Dimensions.get('window').width;
 
@@ -102,12 +102,11 @@ export default function AttendanceGrid({
                 const isHoliday = holidays?.includes(dateStr);
                 const isSunday = date.getDay() === 0;
 
-                // 1. Find Data for this day
                 const dayData = heatmapData?.find(
                   (d: any) => d.date === dateStr,
                 );
                 const attendedCount = dayData?.count || 0;
-                const totalForDay = dayData?.total || 0; // Standard daily count
+                const totalForDay = dayData?.total || 0;
 
                 const isMissedClass = totalForDay > 0 && attendedCount === 0;
 
@@ -243,17 +242,15 @@ const styles = StyleSheet.create({
     color: '#757575',
   },
   densityText: {
-    fontSize: 7, // Keep it very small
+    fontSize: 7, 
     fontWeight: 'bold',
     position: 'absolute',
     bottom: 2,
   },
-  // Ensure your holiday style matches your new gray
   holidayCell: {
     backgroundColor: '#F1F1F1',
   },
   calendarCell: {
-    // Keeps the cells perfectly square
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
@@ -272,7 +269,7 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   statsView: {
-    paddingVertical: 20, // Replaced hardcoded height: 160
+    paddingVertical: 20, 
     justifyContent: 'center',
     alignItems: 'center',
   },

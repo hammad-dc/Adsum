@@ -79,7 +79,6 @@ export default function Profile({session, onBack}: any) {
             }}
             style={styles.avatar}
           />
-          {/* Displays Real Name from DB instead of email prefix */}
           <Text style={styles.name}>{profile?.name || 'Loading...'}</Text>
           <Text style={styles.role}>
             {profile?.role === 'teacher' ? 'Faculty' : 'Student'}
@@ -96,7 +95,6 @@ export default function Profile({session, onBack}: any) {
 
           <View style={styles.divider} />
 
-          {/* NEW: Conditional ID/Course Row */}
           <View style={styles.infoRow}>
             {profile?.role === 'teacher' ? (
               <>

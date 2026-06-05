@@ -3,7 +3,6 @@ import {PermissionsAndroid, Platform} from 'react-native';
 
 export const manager = new BleManager();
 
-// 👇 THIS MUST MATCH THE TEACHER UUID EXACTLY
 const TARGET_SERVICE_UUID = '0000AD50-0000-1000-8000-00805F9B34FB';
 
 export const requestBluetoothPermissions = async () => {
@@ -14,7 +13,7 @@ export const requestBluetoothPermissions = async () => {
     const result = await PermissionsAndroid.requestMultiple([
       PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
       PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-      PermissionsAndroid.PERMISSIONS.BLUETOOTH_ADVERTISE, // ✅ ADDED THIS: Required for Teacher mode
+      PermissionsAndroid.PERMISSIONS.BLUETOOTH_ADVERTISE, // ADDED THIS: Required for Teacher mode
       PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
     ]);
 

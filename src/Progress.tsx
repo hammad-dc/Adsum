@@ -116,8 +116,6 @@ export default function Progress({profile, session, onBack}: any) {
                     <Text style={styles.subjectName}>{item.subject_name}</Text>
                     <Text style={styles.subjectType}>{item.subject_type}</Text>
                   </View>
-
-                  {/* Update: Badge color is now dynamic */}
                   <View style={[styles.badge, {backgroundColor: badgeBg}]}>
                     <Text style={[styles.badgeText, {color: progressColor}]}>
                       {percentage}%
@@ -130,7 +128,6 @@ export default function Progress({profile, session, onBack}: any) {
                 </Text>
 
                 <View style={styles.progressBg}>
-                  {/* Update: Progress bar color is now dynamic */}
                   <View
                     style={[
                       styles.progressFill,

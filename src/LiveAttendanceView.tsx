@@ -52,7 +52,7 @@ export default function LiveAttendanceView({
     }
   };
 
-  // --- 2. Subscribe to Real-Time Updates ---
+  // --- 2.Subscribe to Real-Time Updates ---
   useEffect(() => {
     const backAction = () => {
       if (onBack) {
@@ -62,7 +62,7 @@ export default function LiveAttendanceView({
       return false;
     };
 
-    // 2. Register the listener
+    // Register the listener
     const backHandler = BackHandler.addEventListener(
       'hardwareBackPress',
       backAction,

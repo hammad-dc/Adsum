@@ -302,3 +302,5 @@ Regarding your idea to shoot a video demonstrating the Bluetooth and GPS feature
 Recording a clean, 60-to-90 second screen-recording video where you place the Teacher screen and the Student screen side-by-side (using your two emulators or two physical phones) is the most effective way to prove that your complex BLE and WebSocket logic functions in real-time. You can upload the video to YouTube as "Unlisted" or host it directly in the GitHub repository, then link it in the Demo section provided in the template above.
 
 ```
+
+

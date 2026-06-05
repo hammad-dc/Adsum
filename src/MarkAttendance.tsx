@@ -17,14 +17,12 @@ import {
   MapPin,
   CheckCircle,
   Keyboard,
-} from 'lucide-react-native'; // Add this to your React imports
+} from 'lucide-react-native'; 
 
-// Add this right under your useState hooks inside the component:
 import {supabase} from './lib/supabase';
 import {manager, requestBluetoothPermissions} from './lib/ble';
 import Geolocation from 'react-native-geolocation-service';
 import {getDistanceFromLatLonInMeters} from './lib/location';
-// --- SURGICAL CHANGE: ADD DEVICE INFO IMPORT ---
 import DeviceInfo from 'react-native-device-info';
 
 const SERVICE_UUID = '0000AD50-0000-1000-8000-00805F9B34FB';
@@ -40,10 +38,10 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
   const [currentDist, setCurrentDist] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [isError, setIsError] = useState(false);
-  const [isHardwareRequired, setIsHardwareRequired] = useState(true); // New variable
+  const [isHardwareRequired, setIsHardwareRequired] = useState(true); 
   const [isAlreadyMarked, setIsAlreadyMarked] = useState(false);
   const [liveCode, setLiveCode] = useState(classData.active_code);
-  // FIX: Added One-Time Code State
+  //  Added One-Time Code State
   const [inputCode, setInputCode] = useState('');
 
   const decodeBase64ToBytes = (base64Str: string): number[] => {
@@ -89,7 +87,7 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
         },
         payload => {
           if (payload.new.active_code) {
-            setLiveCode(payload.new.active_code); // Update the state instantly
+            setLiveCode(payload.new.active_code); 
           }
         },
       )
@@ -141,7 +139,7 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
 
           let isMatch = false;
 
-          // 🎯 UNIVERSAL SCANNER: Slide through the array looking for our exact 4-byte signature
+          // UNIVERSAL SCANNER: Slide through the array looking for our exact 4-byte signature
           // This works no matter how many random bytes Samsung or Xiaomi injects at the start
           for (let i = 0; i < decodedBytes.length - 3; i++) {
             if (
@@ -213,7 +211,7 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
 
     const blePerm = await requestBluetoothPermissions();
     if (blePerm) {
-      // Call the function, it handles the interval assignment internally now
+      // Calling the function, it handles the interval assignment internally now
       scanForTeacher();
     }
     checkLocation();
@@ -310,7 +308,6 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
   };
 
   if (step === 2) {
-    // Define theme based on status
     const theme = isAlreadyMarked
       ? {
           color: '#2196F3',
@@ -384,7 +381,7 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
                     isError && styles.otpBoxError,
                   ]}>
                   <Text style={styles.otpText}>{inputCode[index] || ''}</Text>
-                  {/* Subtle cursor line for the active box */}
+                  {/*cursor line for the active box */}
                   {isFocused && <View style={styles.activeCursor} />}
                 </View>
               );
@@ -397,13 +394,11 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
               const cleaned = val.replace(/[^0-9]/g, '');
               if (cleaned.length <= 4) {
                 setInputCode(cleaned);
-                setIsError(false); // Reset error status while typing
+                setIsError(false);
 
-                // ✅ INSTANT LOGIC: Check as soon as the 4th digit is entered
                 if (cleaned.length === 4) {
                   if (cleaned !== classData.active_code) {
                     setIsError(true);
-                    // Auto-clear the wrong code after a second so they can try again
                     setTimeout(() => {
                       setIsError(false);
                       setInputCode('');

@@ -9,7 +9,7 @@ import {
   RefreshControl,
   BackHandler,
   Modal,
-  StatusBar, // 🎯 Added Modal
+  StatusBar,
 } from 'react-native';
 import {
   ArrowLeft,
@@ -29,7 +29,7 @@ export default function AcademicReports({teacherId, onBack}: any) {
   const [reports, setReports] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  // 🎯 Detail View State
+  // Detail View State
   const [selectedSubject, setSelectedSubject] = useState<any>(null);
   const [sessionHistory, setSessionHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -173,7 +173,7 @@ export default function AcademicReports({teacherId, onBack}: any) {
           />
         </View>
 
-        {/* 🎯 Explanation Label */}
+        {/* Explanation Label */}
         <View style={styles.labelRow}>
           <Text style={styles.labelText}>
             {hasSessions
@@ -212,7 +212,7 @@ export default function AcademicReports({teacherId, onBack}: any) {
         )}
       </ScrollView>
 
-      {/* 🎯 Session History Modal */}
+      {/* Session History Modal */}
       <Modal
         visible={!!selectedSubject}
         animationType="slide"
@@ -281,8 +281,6 @@ export default function AcademicReports({teacherId, onBack}: any) {
                                   },
                                 )}
                           </Text>
-
-                          {/* Clean Ongoing badge right next to the start time */}
                           {!session.closed_at && (
                             <View
                               style={{
@@ -315,7 +313,6 @@ export default function AcademicReports({teacherId, onBack}: any) {
                       <View style={styles.sessionCountBadge}>
                         <Users size={12} color="#2196F3" />
                         <Text style={styles.sessionCountText}>
-                          {/* Use optional chaining safely and point to selectedSubject for the total */}
                           {session.attendance?.[0]?.count || 0}/
                           {selectedSubject?.expected_students_per_class || 0}{' '}
                           Present
@@ -329,7 +326,7 @@ export default function AcademicReports({teacherId, onBack}: any) {
           </View>
         </View>
       </Modal>
-      {/* 🎯 Standard Bottom Navigation */}
+      {/* Standard Bottom Navigation */}
       <View style={styles.bottomNav}>
         <TouchableOpacity
           style={styles.navItem}
@@ -461,7 +458,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
     borderTopWidth: 1,
     borderTopColor: '#E0E0E0',
-    position: 'absolute', // 🎯 Keeps it fixed at the bottom
+    position: 'absolute',
     bottom: 0,
     width: '100%',
   },

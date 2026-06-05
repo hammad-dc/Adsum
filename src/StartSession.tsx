@@ -34,7 +34,6 @@ const {width: SCREEN_WIDTH} = Dimensions.get('window');
 const APP_UUID = '0000AD50-0000-1000-8000-00805F9B34FB';
 
 export default function StartSession({classSession, onBack, onNavigate}: any) {
-  // Inside export default function StartSession
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
   const [sessionStarted, setSessionStarted] = useState(false);
@@ -75,7 +74,7 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
 
   const startBroadcast = async () => {
     try {
-      setLoading(true); // 🎯 Show loading state while hardware starts
+      setLoading(true); // Show loading state while hardware starts
       console.log('1. Loading started, requesting permissions...');
       // 1. Double check permissions first
       const granted = await requestBluetoothPermissions();
@@ -86,7 +85,7 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
       // 2. Stop any existing broadcast safely
       await BLEAdvertiser.stopBroadcast().catch(() => {});
 
-      // 3. 🎯 CRITICAL: Give Android hardware a second to breathe
+      // 3. CRITICAL: Give Android hardware a second to breathe I mean give him some sunshine 
       await new Promise(resolve => setTimeout(resolve, 800));
 
       const major = Math.floor(classSession.id / 65536);
@@ -102,11 +101,11 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
 
       console.log('Broadcast active');
       setBeaconActive(true);
-      updateLocation(); //
+      updateLocation(); 
     } catch (e: any) {
       console.log('Broadcast Error:', e);
       setBeaconActive(false);
-      // 🎯 If it fails, give a more specific alert
+      // If it fails, give a more specific alert
       Alert.alert(
         'Signal Error',
         'Please toggle your Bluetooth OFF and then ON again to reset the adapter.',
@@ -133,18 +132,17 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
       .single();
 
     if (sessData) {
-      // 🎯 If is_active is false, we show "TAP TO START"
+      // If is_active is false, we show "TAP TO START"
       setSessionStarted(sessData.is_active);
       setCurrentCode(sessData.active_code || '----');
 
-      // 🎯 THE MISSING LINK: Restore the Master Switch (Live Signal)
       setBeaconActive(sessData.is_hardware_required || false);
 
       // Maintain Geofence preference from DB
       setIsAdHoc(sessData.is_live_location || false);
 
       if (sessData.is_active) {
-        // 🎯 Resume logic only if session is already live
+        // Resume logic only if session is already live
         if (sessData.timer_state === 'RUNNING' && sessData.expires_at) {
           const now = new Date().getTime();
           const expiry = new Date(sessData.expires_at).getTime();
@@ -155,7 +153,7 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
           setTimerRunning(false);
         }
       } else {
-        // 🎯 New session defaults
+        // New session defaults
         setCodeExpiry(120);
         setTimerRunning(false);
       }
@@ -215,7 +213,6 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
   };
 
   const triggerSecurityMenu = () => {
-    // This satisfies your "ask the user what to do" requirement
     Alert.alert(
       '⚠️ Security Setup',
       'Choose the verification level for this class:',
@@ -281,7 +278,7 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
 
     try {
       if (newValue) {
-        // 📡 LIVE MODE: Get fresh GPS
+        // LIVE MODE: Get fresh GPS
         Geolocation.getCurrentPosition(
           async pos => {
             await supabase
@@ -302,7 +299,7 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
           {enableHighAccuracy: true, timeout: 15000, maximumAge: 0},
         );
       } else {
-        // 🏛️ FIXED MODE: Fetch original room coords from 'classrooms' table
+        //  FIXED MODE: Fetch original room coords from 'classrooms' table
         const {data: roomData} = await supabase
           .from('classrooms')
           .select('gps_lat, gps_long')
@@ -325,8 +322,6 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
       setIsAdHoc(!newValue);
     }
   };
-  //19.1344299
-  //72.8437617
 
   const finalizeClass = async () => {
     Alert.alert('End Class?', 'Stop beacon and save attendance?', [
@@ -366,7 +361,7 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
     setTimerRunning(willBeRunning);
 
     if (willBeRunning) {
-      // 🎯 RESUMING: Set a future "Death Date" based on current countdown
+      // RESUMING: Set a future "Death Time" based on current countdown
       const newExpiry = new Date();
       newExpiry.setSeconds(newExpiry.getSeconds() + codeExpiry);
 
@@ -378,13 +373,13 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
         })
         .eq('id', classSession.id);
     } else {
-      // 🎯 PAUSING: Freeze the current second in the DB
+      // PAUSING: Freeze the current second in the DB
       await supabase
         .from('sessions')
         .update({
           timer_state: 'PAUSED',
           frozen_seconds: codeExpiry,
-          expires_at: null, // Clear the goalpost
+          expires_at: null, 
         })
         .eq('id', classSession.id);
     }
@@ -392,7 +387,7 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
 
   useEffect(() => {
     const subscription = manager.onStateChange(state => {
-      // 🎯 Only act if the session is LIVE and the beacon should be active
+      // Only act if the session is LIVE and the beacon should be active
       if (sessionStarted && beaconActive) {
         if (state === 'PoweredOff') {
           // This handles the mid-session manual Bluetooth turn-off
@@ -407,7 +402,7 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
       }
     });
     return () => subscription.remove();
-  }, [beaconActive, sessionStarted]); // 🚀 Runs every time the toggle changes
+  }, [beaconActive, sessionStarted]); // Runs every time the toggle changes
 
   // --- 1. Main Initialization Effect (Runs Once) ---
   useEffect(() => {
@@ -415,7 +410,6 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
 
     initialize();
 
-    // D. Real-time Subscription
     const sub = supabase
       .channel('live-room')
       .on(
@@ -446,11 +440,12 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
     };
   }, [classSession.id]); // Triggered by session ID
   // Dependency on ID is safer
+
   // --- 2. Timer Effect (Runs only when timer state changes) ---
   useEffect(() => {
     let timer: NodeJS.Timeout;
 
-    // ✅ FIX: Only run the interval if the session has actually started AND timer isn't paused
+    // FIX: Only run the interval if the session has actually started AND timer isn't paused
     if (sessionStarted && timerRunning) {
       timer = setInterval(() => {
         setCodeExpiry(prev => {
@@ -478,7 +473,7 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
           </TouchableOpacity>
         </View>
 
-        {/* ✅ BIG CLASS NAME (Uses the new variable) */}
+        {/* CLASS NAME  */}
         <Text style={styles.headerTitle} numberOfLines={2} adjustsFontSizeToFit>
           {className}
         </Text>
@@ -489,7 +484,7 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
         <View style={styles.card}>
           <View style={styles.rowBetween}>
             <View style={styles.rowFill}>
-              {/* ✅ Uses new rowFill style */}
+              {/*rowFill style */}
               <View
                 style={[
                   styles.iconCircle,
@@ -500,7 +495,6 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
                 ]}>
                 <Radius color={isAdHoc ? '#fff' : '#757575'} size={20} />
               </View>
-              {/* ✅ This View now has flex: 1 to protect the switch */}
               <View style={{marginLeft: 12, flex: 1}}>
                 <View
                   style={{
@@ -512,8 +506,8 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
                   <TouchableOpacity
                     onPress={() =>
                       Alert.alert(
-                        'Geofence Security Mode', // ✅ Alert Title
-                        '• LOCKED: Uses the official college coordinates for this room. Best for preventing location cheating.\n\n• LIVE: Uses your current phone GPS. Best for outdoor lectures or temporary room changes.', // ✅ Alert Message
+                        'Geofence Security Mode', 
+                        '• LOCKED: Uses the official college coordinates for this room. Best for preventing location cheating.\n\n• LIVE: Uses your current phone GPS. Best for outdoor lectures or temporary room changes.', 
                       )
                     }
                     style={{padding: 4}}>
@@ -529,21 +523,19 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
                 </Text>
               </View>
             </View>
-
-            {/* ✅ Switch is now anchored safely to the right */}
             <View style={styles.switchContainer}>
               {loading ? (
                 <ActivityIndicator size="small" color="#2196F3" />
               ) : (
                 <Switch
-                  // 🎯 Visuals stay locked to the Master Switch
+                  // Visuals stay locked to the Master Switch
                   value={sessionStarted && beaconActive ? isAdHoc : false}
                   thumbColor={
                     isAdHoc && sessionStarted && beaconActive
                       ? '#2196F3'
                       : '#f4f3f4'
                   }
-                  // 🎯 Removed 'disabled' prop so we can intercept the tap
+                  //  Removed 'disabled' prop so we can intercept the tap
                   onValueChange={val => {
                     // 1. Check if class has even started
                     if (!sessionStarted) {
@@ -554,7 +546,7 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
                       return;
                     }
 
-                    // 2. 🎯 THE FEEDBACK: Check if Master Switch is off
+                    // 2. THE FEEDBACK: Check if Master Switch is off
                     if (!beaconActive) {
                       Alert.alert(
                         'Live Signal Required',
@@ -579,7 +571,7 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
               <View
                 style={[
                   styles.iconCircle,
-                  // 🎯 Only blue if BOTH toggles are active
+                  // Only blue if BOTH toggles are active
                   {
                     backgroundColor:
                       isAdHoc && beaconActive ? '#2196F3' : '#EEEEEE',
@@ -625,7 +617,7 @@ export default function StartSession({classSession, onBack, onNavigate}: any) {
                     startBroadcast();
                   } else {
                     stopBroadcast();
-                    // 3. 🎯 THE KILL SWITCH: If Live Signal turns off, force Geofence off
+                    // 3. THE KILL SWITCH: If Live Signal turns off, force Geofence off
                     if (isAdHoc) {
                       setIsAdHoc(false);
                       await supabase
@@ -854,32 +846,31 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   headerTop: {
-    marginBottom: 0, // Removed gap between arrow and text
+    marginBottom: 0, 
     alignItems: 'flex-start',
   },
   headerTitle: {
     color: '#FFF',
-    fontSize: 22, // Big font
+    fontSize: 22, 
     fontWeight: '600',
     letterSpacing: 0.3,
-    marginLeft: 12, // ✅ Add space between Arrow and Name
+    marginLeft: 12, 
     flex: 1,
     lineHeight: 28,
   },
-  // headerSub removed
 
   // --- CONTENT (SPREAD OUT) ---
   scrollContent: {
     padding: 16,
     paddingTop: 25,
-    flexGrow: 1, // Helps content stretch
+    flexGrow: 1,
   },
 
   // --- CARDS (Increased spacing between them) ---
   card: {
     backgroundColor: '#FFF',
     borderRadius: 16,
-    padding: 20, // ✅ INCREASED padding from 16 to 24
+    padding: 20, 
     marginBottom: 20,
     elevation: 2,
     shadowColor: '#000',
@@ -895,7 +886,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    height: '100%', // 🎯 Forces perfect vertical/horizontal centering
+    height: '100%',
   },
 
   // --- ROW HELPERS ---
@@ -955,7 +946,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 1,
     borderColor: '#E0E0E0',
-    marginTop: 15, // Increased space above button
+    marginTop: 15,
   },
   outlineText: {
     color: '#757575',
@@ -1019,14 +1010,14 @@ const styles = StyleSheet.create({
   rowFill: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1, // ✅ Ensures this side takes only available space
+    flex: 1,
   },
   circleContainer: {
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
     marginTop: 20,
-    position: 'relative', // ✅ Essential for absolute positioning of text
+    position: 'relative', 
   },
   startLabel: {
     fontSize: 12,

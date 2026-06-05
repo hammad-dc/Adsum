@@ -54,7 +54,7 @@ export default function TeacherDashboard({
   const [classes, setClasses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [assignedSubjects, setAssignedSubjects] = useState<any[]>([]); // For the bottom list
+  const [assignedSubjects, setAssignedSubjects] = useState<any[]>([]);
 
   const teacherEmailSeed = getProfileSeed(teacher);
   const [totalSessions, setTotalSessions] = useState(0);
@@ -77,7 +77,7 @@ export default function TeacherDashboard({
         .eq('teacher_id', teacher.id)
         .is('closed_at', null);
 
-      // 2. 🎯 FIX: Fetch Subjects via the Assignment Bridge Table
+      // FIX: Fetch Subjects via the Assignment Bridge Table
       const {data: assignments, error: subErr} = await supabase
         .from('subject_assignments')
         .select(
@@ -96,7 +96,7 @@ export default function TeacherDashboard({
         assignments?.map(a => a.subjects).filter(Boolean) || [];
 
       setClasses(activeSessions || []);
-      setAssignedSubjects(mappedSubjects); // Now only shows relevant subjects
+      setAssignedSubjects(mappedSubjects); 
     } catch (err) {
       console.error('Fetch failed:', err);
     } finally {
@@ -105,7 +105,7 @@ export default function TeacherDashboard({
   };
 
   const fetchTeacherProfile = async () => {
-    if (!teacher?.id) return; // ✅ Don't fetch if ID is missing yet
+    if (!teacher?.id) return; // Don't fetch if ID is missing yet
 
     const {data, error} = await supabase
       .from('profiles')
@@ -131,12 +131,11 @@ export default function TeacherDashboard({
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      // Re-run both fetchers to update everything
       await Promise.all([fetchClasses(), fetchTeacherProfile()]);
     } catch (err) {
       console.error('Refresh failed:', err);
     } finally {
-      setRefreshing(false); // Stop the spinner
+      setRefreshing(false);
     }
   };
 
@@ -152,7 +151,6 @@ export default function TeacherDashboard({
   };
 
   const handleReportClick = () => {
-    // Directly trigger the standardized navigation key[cite: 2]
     onNavigate && onNavigate('academic-reports');
   };
 
@@ -294,7 +292,7 @@ export default function TeacherDashboard({
           </View>
 
           <ScrollView
-            contentContainerStyle={{flexGrow: 1}} // Allows the content to stretch and scroll
+            contentContainerStyle={{flexGrow: 1}} // This Allows the content to stretch and scroll
             showsVerticalScrollIndicator={false}
             refreshControl={
               <RefreshControl
@@ -325,7 +323,6 @@ export default function TeacherDashboard({
                 Your Assigned Subjects
               </Text>
 
-              {/* ✅ Convert FlatList to .map() to fix the scrolling bug */}
               <View style={styles.assignedWrapper}>
                 {assignedSubjects?.map(item => (
                   <TouchableOpacity
@@ -335,7 +332,7 @@ export default function TeacherDashboard({
                       onNavigate &&
                       onNavigate('add-class', {
                         initialSubject: item,
-                        teacherId: teacher.id, // 🎯 Also pass it here
+                        teacherId: teacher.id,
                       })
                     }>
                     <View style={styles.subjectIcon}>
@@ -351,8 +348,6 @@ export default function TeacherDashboard({
                   </TouchableOpacity>
                 ))}
               </View>
-
-              {/* ✅ Extra space at the bottom to ensure the last item clears the Nav Bar */}
               <View style={{height: 120}} />
             </View>
           </ScrollView>
@@ -546,7 +541,7 @@ const styles = StyleSheet.create({
     elevation: 2,
     borderLeftWidth: 4,
     borderLeftColor: '#2196F3',
-    width: '100%', // Highlights it's a "create" action
+    width: '100%',
   },
   subjectIcon: {
     width: 40,
@@ -682,6 +677,6 @@ const styles = StyleSheet.create({
     gap: 15,
   },
   infoDivider: {height: 1, backgroundColor: '#EEE'},
-  infoLabel: {fontSize: 12, color: '#757575'}, // ✅ Added missing style
-  infoValue: {fontSize: 16, color: '#212121', fontWeight: '600'}, // ✅ Added missing style
+  infoLabel: {fontSize: 12, color: '#757575'},
+  infoValue: {fontSize: 16, color: '#212121', fontWeight: '600'},
 });

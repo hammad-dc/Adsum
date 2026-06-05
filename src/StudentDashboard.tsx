@@ -1,5 +1,5 @@
 import React, {useState, useEffect} from 'react';
-import AttendanceGrid from './AttendanceGrid'; // Import the new component
+import AttendanceGrid from './AttendanceGrid'; 
 import Progress from './Progress';
 import {
   View,
@@ -56,8 +56,6 @@ export default function StudentDashboard({session, onNavigate}: any) {
   const [holidays, setHolidays] = useState<string[]>([]);
 
   // --- 2. TOP-LEVEL DATA FETCHING FUNCTIONS ---
-  // (Moved outside of useEffect so onRefresh can call them)
-
   const getProfile = async () => {
     setProfileLoading(true);
     try {
@@ -231,8 +229,8 @@ export default function StudentDashboard({session, onNavigate}: any) {
   const getStatusColor = (status: string) => {
     return {bg: '#4CAF50', text: '#FFFFFF', label: 'Ongoing'};
   };
-  const email = session?.user?.email || 'user@adsum.com'; //
-  const role = 'Student'; //
+  const email = session?.user?.email || 'user@adsum.com'; 
+  const role = 'Student'; 
 
   const renderContent = () => {
     // --- TAB 1: HOME ---
@@ -243,8 +241,8 @@ export default function StudentDashboard({session, onNavigate}: any) {
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
-              refreshing={refreshing} // 🎯 USE THIS instead of 'loading'
-              onRefresh={onRefresh} // 🎯 USE THIS instead of 'fetchLiveClasses'
+              refreshing={refreshing} 
+              onRefresh={onRefresh}
               colors={['#2196F3']}
             />
           }>
@@ -372,7 +370,6 @@ export default function StudentDashboard({session, onNavigate}: any) {
           {/* 1. Profile Header */}
           <View style={styles.profileHeader}>
             <Image
-              // ✅ FIX 2: Updated Profile Tab Avatar (The one you asked for!)
               source={{
                 uri: email
                   ? `https://api.dicebear.com/9.x/initials/png?seed=${profile?.name}&backgroundColor=2196F3&chars=2`
@@ -451,7 +448,7 @@ export default function StudentDashboard({session, onNavigate}: any) {
         <TouchableOpacity
           style={styles.navItem}
           onPress={() => setActiveTab('history')}>
-          <TrendingUp // or keep the History icon if you prefer
+          <TrendingUp 
             size={24}
             color={activeTab === 'history' ? '#2196F3' : '#757575'}
           />
@@ -501,18 +498,16 @@ const styles = StyleSheet.create({
 
   headerContainer: {
     backgroundColor: '#2196F3',
-    paddingTop: 20, // Reduced for a slimmer look
-    paddingBottom: 45, // Reduced to pull the card up
+    paddingTop: 20,
+    paddingBottom: 45, 
     paddingHorizontal: 20,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
   },
   headerContent: {
     flexDirection: 'row',
-    // justifyContent: 'space-between',
     gap: 12,
     alignItems: 'center',
-    // marginBottom: 20,
   },
 
   userInfo: {flexDirection: 'row', alignItems: 'center', gap: 12},
@@ -587,7 +582,7 @@ const styles = StyleSheet.create({
   navItem: {alignItems: 'center'},
   navText: {fontSize: 12, marginTop: 4, color: '#757575'},
 
-  // --- POLISHED PROFILE STYLES ---
+  // --- PROFILE STYLES ---
   profileContainer: {padding: 20, paddingBottom: 100},
   profileHeader: {alignItems: 'center', marginTop: 20, marginBottom: 40},
   bigAvatar: {

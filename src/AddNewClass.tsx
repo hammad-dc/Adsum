@@ -19,7 +19,7 @@ export default function AddNewClass({onBack, onClassCreated, params}: any) {
   const [isAdHoc, setIsAdHoc] = useState(true);
   const [loading, setLoading] = useState(false);
 
-  // ✅ FIX: Pre-filled with defaults so chips appear INSTANTLY
+  //Pre-filled with defaults so chips appear INSTANTLY
   const [savedSubjects, setSavedSubjects] = useState<any[]>([
     {id: 991, name: 'DSGT', code: 'CS301'},
     {id: 992, name: 'DLCA', code: 'CS302'},
@@ -45,7 +45,7 @@ export default function AddNewClass({onBack, onClassCreated, params}: any) {
         onBack('dashboard'); // Run the back navigation prop passed from the parent
         return true; // "true" means: I handled it, don't close the app.
       }
-      return false; // "false" means: I didn't handle it, let the OS decide. 19.134490, 72.843676
+      return false; // "false" means: I didn't handle it, let the OS decide. 
     };
 
     // 2. Register the listener
@@ -58,9 +58,9 @@ export default function AddNewClass({onBack, onClassCreated, params}: any) {
   }, [onBack, teacherId]);
 
   const fetchMySubjects = async () => {
-    if (!teacherId) return; // 🎯 Safety check
+    if (!teacherId) return; // Safety check
     try {
-      // 🎯 JOIN logic: Get subjects THROUGH the assignment bridge
+      // JOIN logic: Get subjects THROUGH the assignment bridge
       const {data, error} = await supabase
         .from('subject_assignments')
         .select(
@@ -70,11 +70,10 @@ export default function AddNewClass({onBack, onClassCreated, params}: any) {
         )
       `,
         )
-        .eq('teacher_id', params?.teacherId || teacherId); // Ensure you pass teacherId in props
+        .eq('teacher_id', params?.teacherId || teacherId); 
 
       if (error) throw error;
 
-      // Transform joined data: [{subjects: {...}}, {subjects: {...}}] -> [{...}, {...}]
       const mappedData = data?.map(item => item.subjects).filter(Boolean) || [];
 
       setSubjects(mappedData);
@@ -122,7 +121,7 @@ export default function AddNewClass({onBack, onClassCreated, params}: any) {
     setLoading(true);
 
     try {
-      // 1. 🎯 Fetch the official static coordinates for the selected room
+      // 1. Fetch the official static coordinates for the selected room
       // If the room doesn't exist in the DB, it won't crash, it just won't have coords yet
       const {data: roomData} = await supabase
         .from('classrooms')
@@ -136,7 +135,7 @@ export default function AddNewClass({onBack, onClassCreated, params}: any) {
       const newBeaconId = `BEACON-${Math.floor(Math.random() * 10000)}`;
       const initialCode = Math.floor(1000 + Math.random() * 9000).toString();
 
-      // 2. 🎯 Insert into Supabase WITH the ROOM coordinates
+      // 2. Insert into Supabase WITH the ROOM coordinates
       const {data, error} = await supabase
         .from('sessions')
         .insert({
@@ -160,7 +159,7 @@ export default function AddNewClass({onBack, onClassCreated, params}: any) {
           frozen_seconds: 120,
           expires_at: null,
 
-          // 🎯 DEFAULT TO ROOM LOCATION
+          // DEFAULT TO ROOM LOCATION
           is_live_location: false,
           gps_lat: roomData?.gps_lat || null,
           gps_long: roomData?.gps_long || null,
@@ -195,22 +194,6 @@ export default function AddNewClass({onBack, onClassCreated, params}: any) {
       </View>
 
       <ScrollView style={styles.content}>
-        {/* <View style={styles.card}>
-          <View style={styles.rowBetween}>
-            <View>
-              <Text style={styles.label}>Instant Mode</Text>
-              <Text style={styles.subLabel}>Broadcast immediately</Text>
-            </View>
-            <Switch
-              value={isAdHoc}
-              onValueChange={setIsAdHoc}
-              trackColor={{false: '#E0E0E0', true: '#90CAF9'}}
-              thumbColor={isAdHoc ? '#2196F3' : '#f4f3f4'}
-            />
-          </View>
-        </View> */}
-
-        {/* ✅ FIX: Quick Select is BACK and visible immediately */}
         <View style={styles.quickSelectContainer}>
           <Text style={styles.sectionHeader}>
             Quick Select Assigned Subject
@@ -233,7 +216,7 @@ export default function AddNewClass({onBack, onClassCreated, params}: any) {
                       styles.chipText,
                       selectedSubjectId === sub.id && styles.chipTextActive,
                     ]}>
-                    {sub.code} {/* 🎯 Use Code (e.g. CSC402) for the chip UI */}
+                    {sub.code} {/* Use Code (e.g. CSC402) for the chip UI */}
                   </Text>
                 </TouchableOpacity>
               ))
@@ -243,11 +226,11 @@ export default function AddNewClass({onBack, onClassCreated, params}: any) {
           </ScrollView>
         </View>
 
-        {/* --- 🎯 TARGET AUDIENCE SECTION --- */}
+        {/* --- TARGET AUDIENCE SECTION --- */}
         <View style={styles.card}>
           <Text style={styles.sectionHeader}>Target Students</Text>
 
-          {/* 🎯 Only show Batch Selection if it's NOT a Theory lecture */}
+          {/* Only show Batch Selection if it's NOT a Theory lecture */}
           {selectedBatch !== 'ALL' ? (
             <View style={styles.rowBetween}>
               <Text style={styles.label}>Batch Selection: </Text>
@@ -457,7 +440,7 @@ const styles = StyleSheet.create({
   theoryLockBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5', // Light gray background
+    backgroundColor: '#F5F5F5',  
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
@@ -467,7 +450,7 @@ const styles = StyleSheet.create({
   },
   theoryLockText: {
     fontSize: 13,
-    color: '#4CAF50', // Success green to indicate it's auto-handled
+    color: '#4CAF50',
     fontWeight: '600',
     flex: 1,
   },

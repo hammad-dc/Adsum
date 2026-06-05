@@ -17,7 +17,7 @@ import {Lock, Mail, Eye, EyeOff, ShieldAlert} from 'lucide-react-native';
 import DeviceInfo from 'react-native-device-info';
 
 export default function Auth() {
-  const [isLoginMode, setIsLoginMode] = useState(true); // Default to Login
+  const [isLoginMode, setIsLoginMode] = useState(true); 
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [course, setCourse] = useState('');
@@ -25,15 +25,13 @@ export default function Auth() {
   const [semester, setSemester] = useState('');
   const [teacherId, setTeacherId] = useState('');
   const [cprn, setCprn] = useState('');
-  const [batch, setBatch] = useState('A'); // Default to A
-
+  const [batch, setBatch] = useState('A'); 
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // NEW: Teacher Mode Toggle
   const [isTeacherMode, setIsTeacherMode] = useState(false);
-  const [adminKey, setAdminKey] = useState(''); // Secret key to become a teacher
+  const [adminKey, setAdminKey] = useState(''); 
 
   async function handleAuth(type: 'LOGIN' | 'SIGNUP') {
     if (!email || !password) {
@@ -64,7 +62,7 @@ export default function Auth() {
               primary_device_id: deviceId, // LOCK the device here
               course: isTeacherMode ? 'Faculty' : course,
               year: isTeacherMode ? 'N/A' : year,
-              semester: isTeacherMode ? 'N/A' : semester, // Finalized for your CE Sem 4 sprint
+              semester: isTeacherMode ? 'N/A' : semester, 
               cprn: isTeacherMode ? 'N/A' : cprn,
               batch: isTeacherMode ? 'N/A' : batch,
             },

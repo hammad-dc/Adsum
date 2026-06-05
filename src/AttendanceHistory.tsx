@@ -20,7 +20,7 @@ export default function AttendanceHistory({onBack}: any) {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchHistoryAndStats(); // Re-runs your DB queries
+    await fetchHistoryAndStats(); // Re-runs DB queries
     setRefreshing(false);
   };
 
@@ -32,16 +32,14 @@ export default function AttendanceHistory({onBack}: any) {
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      // 1. Fetch History List
       const {data: histData} = await supabase
         .from('attendance')
         .select('*, sessions(class_name, room_number, created_at)')
         .eq('student_id', user.id)
         .order('marked_at', {ascending: false});
 
-      // 2. Fetch Real Stats (Dynamic Denominator)
       const {data: statsData} = await supabase.rpc('get_student_stats', {
-        p_student_id: user.id, // 🎯 Matches our new RPC parameter
+        p_student_id: user.id,
       });
 
       setHistory(histData || []);
@@ -65,21 +63,18 @@ export default function AttendanceHistory({onBack}: any) {
     fetchHistoryAndStats();
   }, []);
 
-  // --- 2. Calculate Real Stats ---
   const totalHeld = stats.total;
   const presentCount = stats.attended;
   const absentCount = totalHeld - presentCount;
   const percentage =
     totalHeld > 0 ? Math.round((presentCount / totalHeld) * 100) : 100;
 
-  // --- 3. Filter List ---
   const displayedList =
     filter === 'All'
       ? history
       : history.filter(r => r.status.toLowerCase() === filter.toLowerCase());
 
   const renderItem = ({item}: any) => {
-    // Robust Date Formatting
     const rawDate = item.marked_at || item.created_at;
     const dateObj = new Date(rawDate);
     const dateStr = dateObj.toLocaleDateString();
@@ -88,8 +83,6 @@ export default function AttendanceHistory({onBack}: any) {
       minute: '2-digit',
     });
 
-    // Get Class Name from the joined 'sessions' table
-    // If it was an ad-hoc class without a name, fallback to "Unknown"
     const className = item.sessions?.class_name || 'Unknown Class';
     const status = item.status === 'present';
 
@@ -108,7 +101,6 @@ export default function AttendanceHistory({onBack}: any) {
             </View>
           </View>
 
-          {/* 🟢/🔴 Dynamic Pill */}
           <View
             style={[styles.pill, status ? styles.pillGreen : styles.pillRed]}>
             <Text

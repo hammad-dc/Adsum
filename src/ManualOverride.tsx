@@ -34,9 +34,6 @@ export default function ManualOverride({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // 1. Fetch Data
-  // --- 1. REFACTORED: SAFE DATA ACCESS ---
-  // --- REFACTORED FOR ARRAY ACCESS ---
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -62,7 +59,6 @@ export default function ManualOverride({
       }
 
       // Access the first element of the subjects array
-      // Supabase often returns joins as arrays unless strictly typed otherwise
       const subjectData = Array.isArray(currentSession.subjects)
         ? currentSession.subjects[0]
         : currentSession.subjects;
@@ -76,9 +72,9 @@ export default function ManualOverride({
         .from('profiles')
         .select('*')
         .eq('role', 'student')
-        .eq('course', subjectData.target_course) // Accessing properties safely
-        .eq('year', subjectData.target_year) // Accessing properties safely
-        .eq('semester', subjectData.target_semester); // Accessing properties safely
+        .eq('course', subjectData.target_course)
+        .eq('year', subjectData.target_year)
+        .eq('semester', subjectData.target_semester);
 
       if (currentSession.target_batch !== 'ALL') {
         studentQuery = studentQuery.eq('batch', currentSession.target_batch);
@@ -105,8 +101,6 @@ export default function ManualOverride({
             s.primary_device_id !== (presentMap.get(s.id) || ''),
         })) || [];
       setStudents(list);
-
-      // ... rest of your mapping logic ...
     } catch (err) {
       console.error('Manual Override Fetch Error:', err);
     } finally {
@@ -117,7 +111,6 @@ export default function ManualOverride({
   useEffect(() => {
     const backAction = () => {
       if (visible) {
-        // 🎯 Use 'onClose' instead of 'onBack'
         if (onClose) {
           onClose();
           return true; // Prevents the app from closing
@@ -125,7 +118,6 @@ export default function ManualOverride({
       }
       return false;
     };
-    // 2. Register the listener
     const backHandler = BackHandler.addEventListener(
       'hardwareBackPress',
       backAction,
@@ -151,13 +143,12 @@ export default function ManualOverride({
       Alert.alert('Success', `Marked ${selectedIds.size} students present.`);
       setSelectedIds(new Set()); // Clear selection
       fetchData(); // Refresh list
-      if (onUpdate) onUpdate(); // Update the main screen count!
+      if (onUpdate) onUpdate(); // Update the main screen count
     } catch (err: any) {
       Alert.alert('Error', err.message);
     }
   };
 
-  // 3. REMOVE STUDENT (Specific Action)
   const removeStudent = async (studentId: string, name: string) => {
     Alert.alert(
       'Revoke Attendance?',
@@ -189,7 +180,7 @@ export default function ManualOverride({
   };
 
   const renderItem = ({item}: any) => {
-    const isSelected = selectedIds.has(item.id); //
+    const isSelected = selectedIds.has(item.id); 
 
     return (
       <View style={styles.card}>
@@ -198,22 +189,21 @@ export default function ManualOverride({
             source={{
               uri: `https://api.dicebear.com/9.x/initials/png?seed=${item.name}`,
             }}
-            style={[styles.avatar, {marginTop: 5}]} //
+            style={[styles.avatar, {marginTop: 5}]}
           />
 
-          {/* 🎯 Name Section - No more truncating */}
+          {/* Name Section */}
           <View style={{flex: 1, marginRight: 10}}>
             <Text style={styles.name}>{item.name}</Text>
             <Text style={styles.subText}>{item.student_id}</Text>
           </View>
 
-          {/* 🎯 Badge Column - Stacked Vertically */}
+          {/* Badge Column - Stacked Vertically */}
           <View style={{alignItems: 'flex-end', gap: 4, minWidth: 90}}>
             {item.isPresent ? (
               <TouchableOpacity
                 style={styles.verifiedBadge}
-                onPress={() => removeStudent(item.id, item.name)} //
-              >
+                onPress={() => removeStudent(item.id, item.name)}>
                 <CheckCircle size={16} color="#4CAF50" />
                 <Text style={styles.verifiedText}>Verified</Text>
               </TouchableOpacity>
@@ -230,16 +220,15 @@ export default function ManualOverride({
             {/* ⚠️ Proxy Flag appears directly UNDER the Verified status */}
             {/* Proxy Flag as an Interactive Info Button */}
             {item.isProxySuspected && (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.proxyBadge, {marginRight: 0, marginTop: 2}]}
                 onPress={() => {
                   Alert.alert(
                     'Proxy Suspected',
                     'This attendance was marked from an unrecognized device. Please check with the student to verify their presence.',
-                    [{ text: 'Understood', style: 'default' }]
+                    [{text: 'Understood', style: 'default'}],
                   );
-                }}
-              >
+                }}>
                 <Info size={16} color="#FF9800" />
                 <Text style={styles.proxyText}>Proxy?</Text>
               </TouchableOpacity>
@@ -375,8 +364,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#CCC',
   },
-
-  // Restored the clean look for verified
   verifiedBadge: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -89,7 +89,7 @@ function MainApp() {
   // --- TEACHER FLOW ---
   if (userRole === 'teacher') {
     const handleReportBack = (targetTab: string = 'dashboard') => {
-      setDashboardTab(targetTab); // 🎯 Sets the state for the dashboard
+      setDashboardTab(targetTab); // Sets the state for the dashboard
       setCurrentScreen(null); // Swaps back to TeacherDashboard
     };
 
@@ -109,7 +109,7 @@ function MainApp() {
             // You might need a ref or a shared state to trigger fetchClasses here
             goHome();
           }}
-          params={selectedData} // ✅ FIX: Pass the subject data here
+          params={selectedData} // FIX: Pass the subject data here
         />
       );
 
@@ -124,12 +124,12 @@ function MainApp() {
       <TeacherDashboard
         initialTab={dashboardTab}
         teacher={{
-          id: session.user.id, // ✅ CRITICAL: Add this line!
+          id: session.user.id, 
           name: session.user.user_metadata?.name || 'Faculty Member',
           email: session.user.email,
         }}
         onNavigate={(screen: string, data: any) => {
-          if (data) setSelectedData(data); // 🎯 This saves the subject info
+          if (data) setSelectedData(data); // This saves the subject info
           setCurrentScreen(screen);
         }}
         onSelectClass={(data: any) => {
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
   container: {flex: 1, justifyContent: 'center', alignItems: 'center'},
 });
 
-// 🎯 This is your new Root Component
+// This is the new Root Component
 export default function App() {
   return (
     <SafeAreaProvider>

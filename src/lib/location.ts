@@ -1,6 +1,4 @@
-// src/lib/location.ts
-
-// 1. Calculate distance in Meters
+// Calculate distance in Meters
 export function getDistanceFromLatLonInMeters(
   lat1: number,
   lon1: number,
@@ -24,12 +22,10 @@ export function getDistanceFromLatLonInMeters(
 function deg2rad(deg: number) {
   return deg * (Math.PI / 180);
 }
-
-// 2. Define a "Target" Location (The Classroom)
-// For testing, we will use the coordinates of "Googleplex" (Default Emulator Location)
-// Teacher: 37.4226711, -122.0849872
+//this is physical google office location in mumbai(BKC)
 export const CLASSROOM_LOCATION = {
-  latitude: 19.1345,
-  longitude: 72.843632,
-  radius: 100, // meters allowed
-};
+  latitude: 19.06598,
+  longitude: 72.86402,
+  radius: 100, 
+}
+

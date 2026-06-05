@@ -1,4 +1,7 @@
-# Adsum
+<div align="center">
+  <img src="./assets/logo.png" alt="Adsum Logo" width="200"/>
+  <h1>Adsum</h1>
+</div>
 
 ## About The Project
 Adsum is a Bring Your Own Device (BYOD) educational ERP and attendance system designed to eliminate the inefficiencies and security vulnerabilities of traditional roll calls. By leveraging the smartphones that students and faculty already carry, Adsum replaces expensive, dedicated biometric scanners with a highly secure, multi-layered software handshake. 
@@ -32,10 +35,18 @@ Adsum ensures physical presence through four concurrent verification layers:
 
 ## Live Demo & Download
 You can download the compiled Android APK directly to test the application on your physical device.
-* [Download Adsum APK (Google Drive)](#) - *Add your link here*
+* [Download Adsum APK (Google Drive)](https://drive.google.com/file/d/1_qgk-JLDqkvDfPvA7y5XchN22DWq2aFh/view?usp=drive_link) 
 
 A video demonstration showcasing the Bluetooth and GPS handshake architecture in real-time is available below.
-* [Watch the Handshake Demo](#) - *Add your video link here*
+* [Watch the Handshake Demo](https://youtu.be/9jhZFR0rttk)
+
+## Screenshots
+<div align="center">
+  <img src="./assets/Teacher_screen1.jpg" alt="Teacher Dashboard" width="250"/>
+  <img src="./assets/Teacher_screen2.jpg" alt="Teacher Session Control Screen" width="250"/>
+  <img src="./assets/Student_screen1.jpg" alt="Student Dashboard" width="250"/>
+  <img src="./assets/Student_screen2.jpg" alt="Student Mark Attendance Screen" width="250"/>
+</div>
 
 ## Getting Started
 To get a local copy up and running on your PC, follow these simple steps.

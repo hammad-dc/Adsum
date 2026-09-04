@@ -65,8 +65,14 @@ yarn-error.log
 # testing
 /coverage
 
-#file to protect the Supabase api key
+# Environment variables
 .env
+.env.*
+!.env.example
 
+# Private context / AI files
 for_gemini.md
 Adsum_context.md
+
+# Dependencies
+node_modules/

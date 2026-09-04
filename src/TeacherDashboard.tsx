@@ -62,6 +62,7 @@ export default function TeacherDashboard({
   const fetchClasses = async () => {
     setLoading(true);
     try {
+      // Keep total count for the top stat card
       const {count: historyCount, error: countErr} = await supabase
         .from('sessions')
         .select('*', {count: 'exact', head: true})
@@ -70,33 +71,35 @@ export default function TeacherDashboard({
       if (countErr) throw countErr;
       setTotalSessions(historyCount || 0);
 
-      // Fetch active sessions (Ongoing)
-      const {data: activeSessions} = await supabase
+      // Fetch strictly active sessions, newest first
+      const {data: activeSessions, error: sessionErr} = await supabase
         .from('sessions')
         .select('*, subjects(*)')
         .eq('teacher_id', teacher.id)
-        .is('closed_at', null);
+        .is('closed_at', null)
+        .order('created_at', {ascending: false});
 
-      // FIX: Fetch Subjects via the Assignment Bridge Table
+      if (sessionErr) throw sessionErr;
+
+      // Fetch Subjects via the Assignment Bridge Table
       const {data: assignments, error: subErr} = await supabase
         .from('subject_assignments')
         .select(
           `
-        subjects (
-          id, name, code, target_course, target_year, target_semester, type
-        )
-      `,
+          subjects (
+            id, name, code, target_course, target_year, target_semester, type
+          )
+        `,
         )
         .eq('teacher_id', teacher.id);
 
       if (subErr) throw subErr;
 
-      // Transform the joined data into a clean array
       const mappedSubjects =
         assignments?.map(a => a.subjects).filter(Boolean) || [];
 
       setClasses(activeSessions || []);
-      setAssignedSubjects(mappedSubjects); 
+      setAssignedSubjects(mappedSubjects);
     } catch (err) {
       console.error('Fetch failed:', err);
     } finally {
@@ -165,10 +168,17 @@ export default function TeacherDashboard({
     const displayName =
       item.class_name || item.subjects?.name || 'Untitled Class';
     const displayRoom = item.room_number || 'Room TBD';
-    const timeString = new Date(item.created_at).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    const dateObj = new Date(item.created_at);
+    const dateTimeString =
+      dateObj.toLocaleDateString([], {
+        month: 'short',
+        day: 'numeric',
+      }) +
+      ' • ' +
+      dateObj.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
 
     return (
       <View style={styles.card}>
@@ -189,7 +199,7 @@ export default function TeacherDashboard({
 
             <View style={styles.metaRow}>
               <Clock size={14} color="#757575" />
-              <Text style={styles.metaText}>{timeString}</Text>
+              <Text style={styles.metaText}>{dateTimeString}</Text>
             </View>
             <View style={styles.metaRow}>
               <MapPin size={14} color="#757575" />

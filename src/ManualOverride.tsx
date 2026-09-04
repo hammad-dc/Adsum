@@ -80,26 +80,36 @@ export default function ManualOverride({
         studentQuery = studentQuery.eq('batch', currentSession.target_batch);
       }
 
-      const {data: allStudents} = await studentQuery.order('name');
+      const {data: allStudents} = await studentQuery.order('cprn', {
+        ascending: true,
+      });
+
       const {data: present} = await supabase
         .from('attendance')
-        .select('student_id, device_id') // Added device_id for security checks
+        .select('student_id, device_id, verification_method') // Fetch verification method
         .eq('session_id', classSession.id);
 
-      // E. Map attendance status and flag suspected proxies
-      const presentMap = new Map(
-        present?.map(p => [p.student_id, p.device_id]),
-      );
+      // Map attendance status and the full record for checks
+      const presentMap = new Map(present?.map(p => [p.student_id, p]));
 
       const list =
-        allStudents?.map(s => ({
-          ...s,
-          isPresent: presentMap.has(s.id),
-          // Flag if the device used doesn't match the student's primary device
-          isProxySuspected:
-            presentMap.has(s.id) &&
-            s.primary_device_id !== (presentMap.get(s.id) || ''),
-        })) || [];
+        allStudents?.map(s => {
+          const attendanceRecord = presentMap.get(s.id);
+          const isPresent = !!attendanceRecord;
+          const isManual = attendanceRecord?.verification_method === 'manual';
+
+          return {
+            ...s,
+            isPresent,
+            isManual, // Add this flag to the UI
+            // Ignore proxy alert if the teacher marked them manually
+            isProxySuspected:
+              isPresent &&
+              !isManual &&
+              s.primary_device_id !== (attendanceRecord.device_id || ''),
+          };
+        }) || [];
+
       setStudents(list);
     } catch (err) {
       console.error('Manual Override Fetch Error:', err);
@@ -180,7 +190,7 @@ export default function ManualOverride({
   };
 
   const renderItem = ({item}: any) => {
-    const isSelected = selectedIds.has(item.id); 
+    const isSelected = selectedIds.has(item.id);
 
     return (
       <View style={styles.card}>
@@ -195,17 +205,34 @@ export default function ManualOverride({
           {/* Name Section */}
           <View style={{flex: 1, marginRight: 10}}>
             <Text style={styles.name}>{item.name}</Text>
-            <Text style={styles.subText}>{item.student_id}</Text>
+            <Text style={styles.subText}>
+              Roll No: {item.cprn || item.student_id}
+            </Text>
           </View>
 
           {/* Badge Column - Stacked Vertically */}
           <View style={{alignItems: 'flex-end', gap: 4, minWidth: 90}}>
             {item.isPresent ? (
               <TouchableOpacity
-                style={styles.verifiedBadge}
+                style={[
+                  styles.verifiedBadge,
+                  item.isManual && {
+                    backgroundColor: '#E3F2FD',
+                    borderColor: '#2196F3',
+                  },
+                ]}
                 onPress={() => removeStudent(item.id, item.name)}>
-                <CheckCircle size={16} color="#4CAF50" />
-                <Text style={styles.verifiedText}>Verified</Text>
+                <CheckCircle
+                  size={16}
+                  color={item.isManual ? '#2196F3' : '#4CAF50'}
+                />
+                <Text
+                  style={[
+                    styles.verifiedText,
+                    item.isManual && {color: '#2196F3'},
+                  ]}>
+                  {item.isManual ? 'Manual' : 'Verified'}
+                </Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity onPress={() => toggleSelection(item.id)}>
@@ -217,7 +244,6 @@ export default function ManualOverride({
               </TouchableOpacity>
             )}
 
-            {/* ⚠️ Proxy Flag appears directly UNDER the Verified status */}
             {/* Proxy Flag as an Interactive Info Button */}
             {item.isProxySuspected && (
               <TouchableOpacity

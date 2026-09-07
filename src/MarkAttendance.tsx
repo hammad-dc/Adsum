@@ -17,7 +17,7 @@ import {
   MapPin,
   CheckCircle,
   Keyboard,
-} from 'lucide-react-native'; 
+} from 'lucide-react-native';
 
 import {supabase} from './lib/supabase';
 import {manager, requestBluetoothPermissions} from './lib/ble';
@@ -30,17 +30,23 @@ const SHORT_UUID = 'AD50';
 const MAX_DISTANCE_METERS = 50; // Strict 50m limit
 
 export default function MarkAttendance({classSession: classData, onBack}: any) {
-  let bleIntervalId: NodeJS.Timeout;
   const bleIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const bleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [step, setStep] = useState(1);
   const [bleFound, setBleFound] = useState(false);
   const [gpsVerified, setGpsVerified] = useState(false);
   const [currentDist, setCurrentDist] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [isError, setIsError] = useState(false);
-  const [isHardwareRequired, setIsHardwareRequired] = useState(true); 
+  const [isHardwareRequired, setIsHardwareRequired] = useState(true);
   const [isAlreadyMarked, setIsAlreadyMarked] = useState(false);
   const [liveCode, setLiveCode] = useState(classData.active_code);
+  const [bleStatus, setBleStatus] = useState<
+    'checking' | 'verified' | 'failed'
+  >('checking');
+  const [gpsStatus, setGpsStatus] = useState<
+    'checking' | 'verified' | 'too_far' | 'failed'
+  >('checking');
   //  Added One-Time Code State
   const [inputCode, setInputCode] = useState('');
 
@@ -87,7 +93,7 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
         },
         payload => {
           if (payload.new.active_code) {
-            setLiveCode(payload.new.active_code); 
+            setLiveCode(payload.new.active_code);
           }
         },
       )
@@ -114,16 +120,21 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
         clearInterval(bleIntervalRef.current);
         bleIntervalRef.current = null;
       }
+
+      if (bleTimeoutRef.current) {
+        clearTimeout(bleTimeoutRef.current);
+        bleTimeoutRef.current = null;
+      }
     };
   }, [classData.id]);
 
   const scanForTeacher = useCallback(() => {
+    setBleStatus('checking');
+
     const expectedMajor = Math.floor(classData.id / 65536);
     const expectedMinor = classData.id % 65536;
 
     const performScan = async () => {
-      if (bleFound) return;
-
       const state = await manager.state();
       if (state !== 'PoweredOn') return;
 
@@ -161,7 +172,12 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
             );
 
             setBleFound(true);
-            setLoading(false);
+            setBleStatus('verified');
+
+            if (bleTimeoutRef.current) {
+              clearTimeout(bleTimeoutRef.current);
+              bleTimeoutRef.current = null;
+            }
 
             manager.stopDeviceScan();
             if (bleIntervalRef.current) {
@@ -190,6 +206,20 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
     };
 
     performScan();
+
+    bleTimeoutRef.current = setTimeout(() => {
+      setBleStatus('failed');
+      manager.stopDeviceScan();
+
+      if (bleIntervalRef.current) {
+        clearInterval(bleIntervalRef.current);
+        bleIntervalRef.current = null;
+      }
+
+      bleTimeoutRef.current = null;
+      //bluetooth scanning turns of after below given seconds
+    }, 20000);
+
     bleIntervalRef.current = setInterval(performScan, 5000);
   }, [classData.id, bleFound]);
 
@@ -221,30 +251,80 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
     const targetLat = classData.gps_lat;
     const targetLong = classData.gps_long;
 
-    if (!targetLat || targetLat === 0) return;
+    setGpsStatus('checking');
+    setGpsVerified(false);
+    setCurrentDist(null);
+
+    if (!targetLat || !targetLong) {
+      setGpsStatus('failed');
+      return;
+    }
 
     Geolocation.getCurrentPosition(
       position => {
         const {latitude, longitude} = position.coords;
+
         const dist = getDistanceFromLatLonInMeters(
           latitude,
           longitude,
           targetLat,
           targetLong,
         );
-        setCurrentDist(Math.round(dist));
+
+        const roundedDistance = Math.round(dist);
+        setCurrentDist(roundedDistance);
 
         if (dist <= MAX_DISTANCE_METERS) {
           setGpsVerified(true);
+          setGpsStatus('verified');
         } else {
           setGpsVerified(false);
+          setGpsStatus('too_far');
         }
       },
-      error => console.log('GPS Error', error),
-      {enableHighAccuracy: true, timeout: 20000, maximumAge: 0},
+      error => {
+        console.log('GPS Error', error);
+        setGpsVerified(false);
+        setGpsStatus('failed');
+      },
+      {
+        enableHighAccuracy: true,
+        //gps scanning turns off after below given seconds
+        timeout: 20000,
+        maximumAge: 0,
+      },
     );
   };
 
+  const retryVerification = async () => {
+    manager.stopDeviceScan();
+
+    if (bleIntervalRef.current) {
+      clearInterval(bleIntervalRef.current);
+      bleIntervalRef.current = null;
+    }
+
+    if (bleTimeoutRef.current) {
+      clearTimeout(bleTimeoutRef.current);
+      bleTimeoutRef.current = null;
+    }
+
+    setBleFound(false);
+    setGpsVerified(false);
+    setCurrentDist(null);
+    setBleStatus('checking');
+    setGpsStatus('checking');
+
+    const blePerm = await requestBluetoothPermissions();
+
+    if (blePerm) {
+      scanForTeacher();
+    } else {
+      setBleStatus('failed');
+    }
+
+    checkLocation();
+  };
   const submitAttendance = async () => {
     setIsError(false);
 
@@ -431,8 +511,10 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
               styles.iconBox,
               {
                 backgroundColor: isHardwareRequired
-                  ? bleFound
+                  ? bleStatus === 'verified'
                     ? '#E8F5E9'
+                    : bleStatus === 'failed'
+                    ? '#FFEBEE'
                     : '#FFF3E0'
                   : '#EEEEEE',
               },
@@ -440,11 +522,13 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
             <Bluetooth
               size={24}
               color={
-                isHardwareRequired
-                  ? bleFound
-                    ? '#4CAF50'
-                    : '#FF9800'
-                  : '#9E9E9E'
+                !isHardwareRequired
+                  ? '#9E9E9E'
+                  : bleStatus === 'verified'
+                  ? '#4CAF50'
+                  : bleStatus === 'failed'
+                  ? '#D32F2F'
+                  : '#FF9800'
               }
             />
           </View>
@@ -459,19 +543,23 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
             <Text style={styles.checkStatus}>
               {!isHardwareRequired
                 ? 'Security Bypassed'
-                : bleFound
+                : bleStatus === 'verified'
                 ? 'Signal Verified'
-                : 'Scanning...'}
+                : bleStatus === 'failed'
+                ? 'Beacon not found. Move closer and retry.'
+                : 'Searching for teacher beacon...'}
             </Text>
           </View>
           {isHardwareRequired ? (
-            bleFound ? (
+            bleStatus === 'verified' ? (
               <CheckCircle color="#4CAF50" />
+            ) : bleStatus === 'failed' ? (
+              <Text style={styles.failedStatus}>Failed</Text>
             ) : (
               <ActivityIndicator size="small" color="#FF9800" />
             )
           ) : (
-            <CheckCircle color="#9E9E9E" /> // Neutral check for bypassed state
+            <CheckCircle color="#9E9E9E" />
           )}
         </View>
 
@@ -485,21 +573,25 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
             style={[
               styles.iconBox,
               {
-                backgroundColor: isHardwareRequired
-                  ? gpsVerified
-                    ? '#E8F5E9'
-                    : '#FFEBEE'
-                  : '#EEEEEE',
+                backgroundColor: !isHardwareRequired
+                  ? '#EEEEEE'
+                  : gpsStatus === 'verified'
+                  ? '#E8F5E9'
+                  : gpsStatus === 'failed' || gpsStatus === 'too_far'
+                  ? '#FFEBEE'
+                  : '#E3F2FD',
               },
             ]}>
             <MapPin
               size={24}
               color={
-                isHardwareRequired
-                  ? gpsVerified
-                    ? '#4CAF50'
-                    : '#F44336'
-                  : '#9E9E9E'
+                !isHardwareRequired
+                  ? '#9E9E9E'
+                  : gpsStatus === 'verified'
+                  ? '#4CAF50'
+                  : gpsStatus === 'failed' || gpsStatus === 'too_far'
+                  ? '#D32F2F'
+                  : '#2196F3'
               }
             />
           </View>
@@ -514,14 +606,20 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
             <Text style={styles.checkStatus}>
               {!isHardwareRequired
                 ? 'Geofence Disabled'
-                : gpsVerified
-                ? `${currentDist}m (Verified)`
-                : 'Locating...'}
+                : gpsStatus === 'verified'
+                ? `${currentDist}m away (Verified)`
+                : gpsStatus === 'too_far'
+                ? `${currentDist}m away. Move within ${MAX_DISTANCE_METERS}m`
+                : gpsStatus === 'failed'
+                ? 'Location failed. Check GPS permission and try again.'
+                : 'Checking your location...'}
             </Text>
           </View>
           {isHardwareRequired ? (
-            gpsVerified ? (
+            gpsStatus === 'verified' ? (
               <CheckCircle color="#4CAF50" />
+            ) : gpsStatus === 'failed' || gpsStatus === 'too_far' ? (
+              <Text style={styles.failedStatus}>Failed</Text>
             ) : (
               <ActivityIndicator size="small" color="#2196F3" />
             )
@@ -530,15 +628,29 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
           )}
         </View>
 
+        {isHardwareRequired &&
+          (bleStatus === 'failed' ||
+            gpsStatus === 'failed' ||
+            gpsStatus === 'too_far') && (
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={retryVerification}>
+              <Text style={styles.retryText}>Retry Verification</Text>
+            </TouchableOpacity>
+          )}
         <TouchableOpacity
           style={[
             styles.btnPrimary,
-            !bleFound && !gpsVerified && styles.btnDisabled,
+            isHardwareRequired &&
+              (!bleFound || !gpsVerified) &&
+              styles.btnDisabled,
           ]}
           onPress={submitAttendance}
           // Disabled if verification failed OR code is empty
           disabled={
-            (!bleFound && !gpsVerified) || loading || inputCode.length !== 4
+            loading ||
+            inputCode.length !== 4 ||
+            (isHardwareRequired && (!bleFound || !gpsVerified))
           }>
           {loading ? (
             <ActivityIndicator color="#FFF" />
@@ -623,6 +735,23 @@ const styles = StyleSheet.create({
   },
   checkTitle: {fontSize: 16, fontWeight: 'bold', color: '#333'},
   checkStatus: {fontSize: 13, color: '#757575'},
+  retryButton: {
+    borderWidth: 1,
+    borderColor: '#2196F3',
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  retryText: {
+    color: '#2196F3',
+    fontWeight: 'bold',
+  },
+  failedStatus: {
+    color: '#D32F2F',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
   btnPrimary: {
     backgroundColor: '#2196F3',
     padding: 18,

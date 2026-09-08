@@ -72,7 +72,6 @@ yarn-error.log
 
 # Private context / AI files
 for_gemini.md
-Adsum_context.md
 
 # Dependencies
 node_modules/

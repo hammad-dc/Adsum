@@ -10,6 +10,9 @@ import {
   StatusBar,
   TextInput,
   BackHandler,
+  Linking,
+  Platform,
+  PermissionsAndroid,
 } from 'react-native';
 import {
   ArrowLeft,
@@ -223,10 +226,32 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
     bleIntervalRef.current = setInterval(performScan, 5000);
   }, [classData.id, bleFound]);
 
+  const requestLocationPermission = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: 'Location Permission Required',
+            message:
+              'Adsum needs access to your GPS to verify you are inside the classroom geofence.',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'Allow',
+          },
+        );
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+      } catch (err) {
+        console.warn(err);
+        return false;
+      }
+    }
+    return true; // iOS handles permissions natively via Info.plist
+  };
   const runChecks = useCallback(async () => {
     const {data: session} = await supabase
       .from('sessions')
-      .select('is_hardware_required')
+      .select('is_hardware_required, gps_lat, gps_long')
       .eq('id', classData.id)
       .single();
 
@@ -238,18 +263,40 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
       setGpsVerified(true);
       return;
     }
-
-    const blePerm = await requestBluetoothPermissions();
-    if (blePerm) {
-      // Calling the function, it handles the interval assignment internally now
-      scanForTeacher();
+    //Check Bluetooth State First
+    const bleState = await manager.state();
+    if (bleState === 'PoweredOff') {
+      Alert.alert(
+        'Bluetooth is Off',
+        'Please turn on Bluetooth to connect to the teacher beacon.',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => setBleStatus('failed'),
+          },
+          {
+            text: 'Open Settings',
+            onPress: () =>
+              Platform.OS === 'ios'
+                ? Linking.openURL('App-Prefs:Bluetooth')
+                : Linking.sendIntent('android.settings.BLUETOOTH_SETTINGS'),
+          },
+        ],
+      );
+      return; // Stop execution until they turn it on
     }
-    checkLocation();
+    const blePerm = await requestBluetoothPermissions();
+    if (blePerm) scanForTeacher();
+    else setBleStatus('failed');
+
+    const locPerm = await requestLocationPermission();
+    if (locPerm) checkLocation(session?.gps_lat, session?.gps_long);
+    else setGpsStatus('failed');
+    
   }, [classData.id, scanForTeacher]);
 
-  const checkLocation = () => {
-    const targetLat = classData.gps_lat;
-    const targetLong = classData.gps_long;
+  const checkLocation = (targetLat: number, targetLong: number) => {
 
     setGpsStatus('checking');
     setGpsVerified(false);
@@ -286,7 +333,23 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
         console.log('GPS Error', error);
         setGpsVerified(false);
         setGpsStatus('failed');
+
+        // Code 2: POSITION_UNAVAILABLE (GPS is physically turned off)
+        if (error.code === 2) {
+          Alert.alert(
+            'Location is Off',
+            "Please swipe down and turn on your phone's Location/GPS services to mark attendance.",
+          );
+        }
+        // Code 1: PERMISSION_DENIED (User blocked the permission popup)
+        else if (error.code === 1) {
+          Alert.alert(
+            'Permission Denied',
+            'Adsum needs Location permissions to verify you are in the classroom.',
+          );
+        }
       },
+
       {
         enableHighAccuracy: true,
         //gps scanning turns off after below given seconds
@@ -315,15 +378,7 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
     setBleStatus('checking');
     setGpsStatus('checking');
 
-    const blePerm = await requestBluetoothPermissions();
-
-    if (blePerm) {
-      scanForTeacher();
-    } else {
-      setBleStatus('failed');
-    }
-
-    checkLocation();
+    runChecks();
   };
   const submitAttendance = async () => {
     setIsError(false);
@@ -418,7 +473,7 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
             }}>
             {theme.sub}
           </Text>
-          <TouchableOpacity style={styles.btnWhite} onPress={onBack}>
+          <TouchableOpacity style={styles.btnWhite} onPress={() => onBack()}>
             <Text style={[styles.btnTextGreen, {color: theme.btnText}]}>
               Back to Dashboard
             </Text>
@@ -432,7 +487,7 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
     <View style={styles.container}>
       <StatusBar backgroundColor="#2196F3" barStyle="light-content" />
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack}>
+        <TouchableOpacity onPress={() => onBack()}>
           <ArrowLeft color="#FFF" size={24} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Mark Attendance</Text>
@@ -501,6 +556,7 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
 
         <Text style={styles.sectionLabel}>2. SIGNAL CHECKS</Text>
         {/* Bluetooth Card */}
+        {/* Bluetooth Card */}
         <View
           style={[
             styles.checkCard,
@@ -510,13 +566,13 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
             style={[
               styles.iconBox,
               {
-                backgroundColor: isHardwareRequired
-                  ? bleStatus === 'verified'
-                    ? '#E8F5E9'
-                    : bleStatus === 'failed'
-                    ? '#FFEBEE'
-                    : '#FFF3E0'
-                  : '#EEEEEE',
+                backgroundColor: !isHardwareRequired
+                  ? '#EEEEEE'
+                  : bleStatus === 'verified'
+                  ? '#E8F5E9'
+                  : bleStatus === 'failed'
+                  ? '#FFEBEE'
+                  : '#FFF3E0',
               },
             ]}>
             <Bluetooth

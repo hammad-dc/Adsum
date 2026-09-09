@@ -15,23 +15,28 @@ import {
 import {supabase} from './lib/supabase';
 import {Lock, Mail, Eye, EyeOff, ShieldAlert} from 'lucide-react-native';
 import DeviceInfo from 'react-native-device-info';
+import {Picker} from '@react-native-picker/picker';
+
+const courseOptions = ['Computer Engineering', 'EXTC', 'AI & ML', 'IoT', 'IT'];
+const yearOptions = ['FE', 'SE', 'TE', 'BE'];
+const semesterOptions = ['1', '2', '3', '4', '5', '6', '7', '8'];
 
 export default function Auth() {
-  const [isLoginMode, setIsLoginMode] = useState(true); 
+  const [isLoginMode, setIsLoginMode] = useState(true);
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
-  const [course, setCourse] = useState('');
-  const [year, setYear] = useState('');
-  const [semester, setSemester] = useState('');
+  const [course, setCourse] = useState(courseOptions[0]);
+  const [year, setYear] = useState(yearOptions[0]);
+  const [semester, setSemester] = useState(semesterOptions[0]);
   const [teacherId, setTeacherId] = useState('');
   const [cprn, setCprn] = useState('');
-  const [batch, setBatch] = useState('A'); 
+  const [batch, setBatch] = useState('A');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   const [isTeacherMode, setIsTeacherMode] = useState(false);
-  const [adminKey, setAdminKey] = useState(''); 
+  const [adminKey, setAdminKey] = useState('');
 
   async function handleAuth(type: 'LOGIN' | 'SIGNUP') {
     if (!email || !password) {
@@ -43,6 +48,18 @@ export default function Auth() {
       Alert.alert(
         'Unauthorized',
         'Invalid Admin Key. You cannot create a teacher account.',
+      );
+      return;
+    }
+
+    if (
+      type === 'SIGNUP' &&
+      !isTeacherMode &&
+      (!course || !year || !semester)
+    ) {
+      Alert.alert(
+        'Missing Academic Details',
+        'Please select your branch, year, and semester.',
       );
       return;
     }
@@ -62,7 +79,7 @@ export default function Auth() {
               primary_device_id: deviceId, // LOCK the device here
               course: isTeacherMode ? 'Faculty' : course,
               year: isTeacherMode ? 'N/A' : year,
-              semester: isTeacherMode ? 'N/A' : semester, 
+              semester: isTeacherMode ? 'N/A' : semester,
               cprn: isTeacherMode ? 'N/A' : cprn,
               batch: isTeacherMode ? 'N/A' : batch,
             },
@@ -70,6 +87,7 @@ export default function Auth() {
         });
         if (error) throw error;
         Alert.alert('Success', 'Account created!');
+        setIsLoginMode(true);
       } else {
         const {error} = await supabase.auth.signInWithPassword({
           email,
@@ -84,6 +102,12 @@ export default function Auth() {
     }
   }
 
+  const toggleMode = () => {
+    setIsLoginMode(!isLoginMode);
+    // Reset forms when switching
+    setEmail('');
+    setPassword('');
+  };
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -109,7 +133,7 @@ export default function Auth() {
             />
           </View>
 
-          {/* 2. Extra fields ONLY show during Signup */}
+          {/* EXTRA FIELDS FOR SIGNUP */}
           {!isLoginMode && (
             <>
               <View style={styles.inputWrapper}>
@@ -134,73 +158,104 @@ export default function Auth() {
                 </View>
               ) : (
                 <>
-                  <View style={styles.inputWrapper}>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Course (e.g. Computer Engineering)"
-                      placeholderTextColor="#999"
-                      onChangeText={setCourse}
-                      value={course}
-                    />
-                  </View>
-                  <View style={styles.inputWrapper}>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Year (e.g. SE)"
-                      placeholderTextColor="#999"
-                      onChangeText={setYear}
-                      value={year}
-                    />
-                  </View>
-                  <View style={styles.inputWrapper}>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Semester (e.g., 4)"
-                      placeholderTextColor="#999"
-                      keyboardType="number-pad" // Makes it easier to type numbers
-                      onChangeText={setSemester}
-                      value={semester}
-                    />
-                  </View>
-                  {!isLoginMode && !isTeacherMode && (
-                    <View style={styles.inputWrapper}>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Enter CPRN Number (e.g. 241299)"
-                        value={cprn}
-                        onChangeText={setCprn}
-                        placeholderTextColor="#999"
-                      />
+                  {/* NATIVE PICKERS FOR ACADEMICS */}
+                  <View style={styles.pickerContainer}>
+                    <Text style={styles.label}>Branch</Text>
+                    <View style={styles.pickerWrapper}>
+                      <Picker
+                        selectedValue={course}
+                        onValueChange={itemValue => setCourse(itemValue)}
+                        style={styles.picker}>
+                        {courseOptions.map(option => (
+                          <Picker.Item
+                            key={option}
+                            label={option}
+                            value={option}
+                          />
+                        ))}
+                      </Picker>
                     </View>
-                  )}
-                  {!isTeacherMode && (
+                  </View>
+
+                  <View style={styles.pickerRow}>
                     <View
                       style={[
-                        styles.batchSelectorContainer,
-                        {marginTop: 0, marginBottom: 15},
+                        styles.pickerContainer,
+                        {flex: 1, marginRight: 10},
                       ]}>
-                      <Text style={styles.label}>Select Your Batch:</Text>
-                      <View style={styles.batchRow}>
-                        {['A', 'B', 'C'].map(b => (
-                          <TouchableOpacity
-                            key={b}
-                            style={[
-                              styles.batchBtn,
-                              batch === b && styles.batchBtnActive,
-                            ]}
-                            onPress={() => setBatch(b)}>
-                            <Text
-                              style={[
-                                styles.batchBtnText,
-                                batch === b && styles.batchBtnTextActive,
-                              ]}>
-                              Batch {b}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
+                      <Text style={styles.label}>Year</Text>
+                      <View style={styles.pickerWrapper}>
+                        <Picker
+                          selectedValue={year}
+                          onValueChange={itemValue => setYear(itemValue)}
+                          style={styles.picker}>
+                          {yearOptions.map(option => (
+                            <Picker.Item
+                              key={option}
+                              label={option}
+                              value={option}
+                            />
+                          ))}
+                        </Picker>
                       </View>
                     </View>
-                  )}
+
+                    <View style={[styles.pickerContainer, {flex: 1}]}>
+                      <Text style={styles.label}>Semester</Text>
+                      <View style={styles.pickerWrapper}>
+                        <Picker
+                          selectedValue={semester}
+                          onValueChange={itemValue => setSemester(itemValue)}
+                          style={styles.picker}>
+                          {semesterOptions.map(option => (
+                            <Picker.Item
+                              key={option}
+                              label={`Sem ${option}`}
+                              value={option}
+                            />
+                          ))}
+                        </Picker>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={styles.inputWrapper}>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Enter CPRN Number (e.g. 241299)"
+                      value={cprn}
+                      onChangeText={setCprn}
+                      placeholderTextColor="#999"
+                      keyboardType="numeric"
+                    />
+                  </View>
+
+                  <View
+                    style={[
+                      styles.batchSelectorContainer,
+                      {marginTop: 0, marginBottom: 15},
+                    ]}>
+                    <Text style={styles.label}>Select Your Batch:</Text>
+                    <View style={styles.batchRow}>
+                      {['A', 'B', 'C'].map(b => (
+                        <TouchableOpacity
+                          key={b}
+                          style={[
+                            styles.batchBtn,
+                            batch === b && styles.batchBtnActive,
+                          ]}
+                          onPress={() => setBatch(b)}>
+                          <Text
+                            style={[
+                              styles.batchBtnText,
+                              batch === b && styles.batchBtnTextActive,
+                            ]}>
+                            Batch {b}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
                 </>
               )}
             </>
@@ -296,6 +351,28 @@ const styles = StyleSheet.create({
   },
   subtitle: {fontSize: 16, color: '#757575'},
   formSection: {width: '100%'},
+  pickerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 15,
+  },
+  pickerContainer: {
+    marginBottom: 15,
+  },
+  pickerWrapper: {
+    backgroundColor: '#F5F7FA',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#EEE',
+    height: 55,
+    justifyContent: 'center',
+  },
+  picker: {
+    height: 55,
+    width: '100%',
+    color: '#333',
+  },
+
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',

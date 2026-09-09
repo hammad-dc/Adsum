@@ -1,5 +1,5 @@
 import React, {useState, useEffect} from 'react';
-import AttendanceGrid from './AttendanceGrid'; 
+import AttendanceGrid from './AttendanceGrid';
 import Progress from './Progress';
 import {
   View,
@@ -135,7 +135,7 @@ export default function StudentDashboard({session, onNavigate}: any) {
         const date = getLocalDateString(a.marked_at); // Timezone safe
         if (!finalMap[date]) finalMap[date] = {attended: 0, held: 0};
         finalMap[date].attended += 1;
-        
+
         if (finalMap[date].attended > finalMap[date].held) {
           finalMap[date].held = finalMap[date].attended;
         }
@@ -160,6 +160,7 @@ export default function StudentDashboard({session, onNavigate}: any) {
       const {data} = await supabase
         .from('sessions')
         .select('*, subjects!inner(*)')
+        .is('closed_at', null)
         .eq('is_active', true)
         .eq('subjects.target_course', profile.course)
         .eq('subjects.target_year', profile.year)
@@ -226,11 +227,26 @@ export default function StudentDashboard({session, onNavigate}: any) {
     ]);
   };
 
-  const getStatusColor = (status: string) => {
-    return {bg: '#4CAF50', text: '#FFFFFF', label: 'Ongoing'};
+  const getSessionTag = (item: any) => {
+    // State 1: Created, but teacher hasn't started it yet
+    if (!item.is_active) {
+      return {bg: '#FFF3E0', text: '#FF9800', label: 'Scheduled'}; // Orange
+    }
+
+    // State 2: Active AND requires Bluetooth/GPS
+    if (item.is_active && item.is_hardware_required) {
+      return {bg: '#E8F5E9', text: '#4CAF50', label: 'Live'}; // Green
+    }
+
+    // State 3: Active BUT hardware checks are bypassed
+    if (item.is_active && !item.is_hardware_required) {
+      return {bg: '#E3F2FD', text: '#2196F3', label: 'Live (Code Only)'}; // Blue
+    }
+
+    return {bg: '#EEEEEE', text: '#9E9E9E', label: 'Unknown'};
   };
-  const email = session?.user?.email || 'user@adsum.com'; 
-  const role = 'Student'; 
+  const email = session?.user?.email || 'user@adsum.com';
+  const role = 'Student';
 
   const renderContent = () => {
     // --- TAB 1: HOME ---
@@ -241,7 +257,7 @@ export default function StudentDashboard({session, onNavigate}: any) {
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
-              refreshing={refreshing} 
+              refreshing={refreshing}
               onRefresh={onRefresh}
               colors={['#2196F3']}
             />
@@ -294,14 +310,21 @@ export default function StudentDashboard({session, onNavigate}: any) {
             )}
 
             {classes.map(item => {
-              const statusColors = getStatusColor('ongoing');
+              const tag = getSessionTag(item);
               const displayName =
                 item.class_name || item.subjects?.name || 'Untitled Class';
               const displayRoom = item.room_number || 'Room TBD';
-              const timeString = new Date(item.created_at).toLocaleTimeString(
-                [],
-                {hour: '2-digit', minute: '2-digit'},
-              );
+              const dateObj = new Date(item.created_at);
+              const dateTimeString =
+                dateObj.toLocaleDateString([], {
+                  month: 'short',
+                  day: 'numeric',
+                }) +
+                ' • ' +
+                dateObj.toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                });
 
               return (
                 <View key={item.id} style={styles.classCard}>
@@ -323,7 +346,7 @@ export default function StudentDashboard({session, onNavigate}: any) {
                       </Text>
                       <View style={styles.metaRow}>
                         <Clock size={14} color="#757575" />
-                        <Text style={styles.metaText}>{timeString}</Text>
+                        <Text style={styles.metaText}>{dateTimeString}</Text>
                       </View>
                       <View style={styles.metaRow}>
                         <MapPin size={14} color="#757575" />
@@ -331,23 +354,31 @@ export default function StudentDashboard({session, onNavigate}: any) {
                       </View>
                     </View>
                     <View
-                      style={[
-                        styles.statusPill,
-                        {backgroundColor: statusColors.bg},
-                      ]}>
-                      <Text
-                        style={[styles.statusText, {color: statusColors.text}]}>
-                        {statusColors.label}
+                      style={[styles.statusPill, {backgroundColor: tag.bg}]}>
+                      <Text style={[styles.statusText, {color: tag.text}]}>
+                        {tag.label}
                       </Text>
                     </View>
                   </View>
 
                   <TouchableOpacity
-                    style={styles.markButton}
+                    style={[
+                      styles.markButton,
+                      !item.is_active && {backgroundColor: '#E0E0E0'}, // Gray out if not active
+                    ]}
+                    disabled={!item.is_active} // Prevent clicking if scheduled
                     onPress={() =>
                       onNavigate && onNavigate('mark-attendance', item)
                     }>
-                    <Text style={styles.markButtonText}>Mark Attendance</Text>
+                    <Text
+                      style={[
+                        styles.markButtonText,
+                        !item.is_active && {color: '#9E9E9E'},
+                      ]}>
+                      {!item.is_active
+                        ? 'Waiting for Teacher...'
+                        : 'Mark Attendance'}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               );
@@ -448,7 +479,7 @@ export default function StudentDashboard({session, onNavigate}: any) {
         <TouchableOpacity
           style={styles.navItem}
           onPress={() => setActiveTab('history')}>
-          <TrendingUp 
+          <TrendingUp
             size={24}
             color={activeTab === 'history' ? '#2196F3' : '#757575'}
           />
@@ -499,7 +530,7 @@ const styles = StyleSheet.create({
   headerContainer: {
     backgroundColor: '#2196F3',
     paddingTop: 20,
-    paddingBottom: 45, 
+    paddingBottom: 45,
     paddingHorizontal: 20,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,

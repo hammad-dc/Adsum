@@ -37,6 +37,7 @@ export default function Auth() {
 
   const [isTeacherMode, setIsTeacherMode] = useState(false);
   const [adminKey, setAdminKey] = useState('');
+  
 
   async function handleAuth(type: 'LOGIN' | 'SIGNUP') {
     if (!email || !password) {
@@ -101,13 +102,14 @@ export default function Auth() {
       setLoading(false);
     }
   }
-
+  
   const toggleMode = () => {
     setIsLoginMode(!isLoginMode);
     // Reset forms when switching
     setEmail('');
     setPassword('');
   };
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}

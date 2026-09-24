@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
-  FlatList,
   StatusBar,
   RefreshControl,
   Alert,
@@ -25,6 +24,7 @@ import {
   BookOpen,
 } from 'lucide-react-native';
 import {supabase} from './lib/supabase';
+import TeacherAnalytics from './TeacherAnalytics';
 
 const InfoRow = ({icon: Icon, label, value, isLast = false}: any) => (
   <View>
@@ -40,7 +40,7 @@ const InfoRow = ({icon: Icon, label, value, isLast = false}: any) => (
 );
 
 const getProfileSeed = (teacher: any) => {
-  return teacher.email || teacher.id || 'teacher@adsum.com';
+  return teacher?.email || teacher?.id || 'teacher@adsum.com';
 };
 
 export default function TeacherDashboard({
@@ -71,7 +71,7 @@ export default function TeacherDashboard({
       if (countErr) throw countErr;
       setTotalSessions(historyCount || 0);
 
-      // Fetch strictly active sessions, newest first
+      // Fetch all recent sessions (Active + Completed)
       const {data: activeSessions, error: sessionErr} = await supabase
         .from('sessions')
         .select('*, subjects(*)')
@@ -80,6 +80,13 @@ export default function TeacherDashboard({
         .order('created_at', {ascending: false});
 
       if (sessionErr) throw sessionErr;
+
+      // const sortedSessions =
+      //   recentSessions?.sort((a, b) => {
+      //     if (a.closed_at === null && b.closed_at !== null) return -1;
+      //     if (a.closed_at !== null && b.closed_at === null) return 1;
+      //     return 0; // If both are active or both closed, keep the created_at order
+      //   }) || [];
 
       // Fetch Subjects via the Assignment Bridge Table
       const {data: assignments, error: subErr} = await supabase
@@ -108,12 +115,13 @@ export default function TeacherDashboard({
   };
 
   const fetchTeacherProfile = async () => {
-    if (!teacher?.id) return; // Don't fetch if ID is missing yet
+    const teacherId = teacher?.id;
+    if (!teacherId) return;
 
     const {data, error} = await supabase
       .from('profiles')
       .select('name, employee_id, email')
-      .eq('id', teacher.id)
+      .eq('id', teacherId)
       .single();
 
     if (error) {
@@ -122,10 +130,11 @@ export default function TeacherDashboard({
       setProfile(data);
     }
   };
+
   useEffect(() => {
     if (initialTab) setActiveTab(initialTab);
 
-    if (teacher?.id) {
+    if (teacher) {
       fetchClasses();
       fetchTeacherProfile();
     }
@@ -157,14 +166,32 @@ export default function TeacherDashboard({
     onNavigate && onNavigate('academic-reports');
   };
 
-  const getStatusColor = (isActive: boolean) => {
-    return isActive
-      ? {bg: '#4CAF50', text: '#FFF', label: 'ONGOING'}
-      : {bg: '#E0E0E0', text: '#757575', label: 'COMPLETED'};
+  const getSessionTag = (item: any) => {
+    // 1. Completed Session
+    if (item.closed_at !== null) {
+      return {bg: '#E0E0E0', text: '#757575', label: 'COMPLETED'};
+    }
+
+    // 2. Scheduled (Created but not started)
+    if (!item.is_active) {
+      return {bg: '#FFF3E0', text: '#FF9800', label: 'SCHEDULED'};
+    }
+
+    // 3. Live WITH Bluetooth/GPS
+    if (item.is_active && item.is_hardware_required) {
+      return {bg: '#E8F5E9', text: '#4CAF50', label: 'LIVE'};
+    }
+
+    // 4. Live WITHOUT hardware checks
+    if (item.is_active && !item.is_hardware_required) {
+      return {bg: '#E3F2FD', text: '#2196F3', label: 'LIVE (CODE ONLY)'};
+    }
+
+    return {bg: '#EEEEEE', text: '#9E9E9E', label: 'UNKNOWN'};
   };
 
   const renderClassItem = ({item}: any) => {
-    const status = getStatusColor(item.closed_at === null);
+    const status = getSessionTag(item);
     const displayName =
       item.class_name || item.subjects?.name || 'Untitled Class';
     const displayRoom = item.room_number || 'Room TBD';
@@ -248,6 +275,10 @@ export default function TeacherDashboard({
   };
 
   const renderContent = () => {
+    if (activeTab === 'analytics') {
+      return <TeacherAnalytics teacher={teacher} />;
+    }
+
     if (activeTab === 'dashboard') {
       return (
         <>
@@ -257,14 +288,14 @@ export default function TeacherDashboard({
                 <Image
                   source={{
                     uri: `https://api.dicebear.com/9.x/initials/png?seed=${
-                      profile?.name || teacher.name || teacher.email
+                      profile?.name || teacher?.name || teacher?.email
                     }&backgroundColor=2196F3&chars=2`,
                   }}
                   style={styles.avatar}
                 />
                 <View>
                   <Text style={styles.teacherName}>
-                    {profile?.name || teacher.name}
+                    {profile?.name || teacher?.name || 'Faculty Member'}
                   </Text>
                   <Text style={{color: '#BBDEFB', fontSize: 12}}>
                     Teacher Dashboard
@@ -274,7 +305,8 @@ export default function TeacherDashboard({
               <TouchableOpacity
                 style={styles.addButton}
                 onPress={() =>
-                  onNavigate && onNavigate('add-class', {teacherId: teacher.id})
+                  onNavigate &&
+                  onNavigate('add-class', {teacherId: teacher?.id})
                 }>
                 <Plus color="#2196F3" size={24} />
               </TouchableOpacity>
@@ -302,18 +334,17 @@ export default function TeacherDashboard({
           </View>
 
           <ScrollView
-            contentContainerStyle={{flexGrow: 1}} // This Allows the content to stretch and scroll
+            contentContainerStyle={{flexGrow: 1}}
             showsVerticalScrollIndicator={false}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={onRefresh}
-                colors={['#2196F3']} // Adsum Blue
+                colors={['#2196F3']}
               />
             }>
             <View style={styles.listContainer}>
-              {/* --- UPPER PART: ONGOING SESSIONS --- */}
-              <Text style={styles.sectionTitle}>Ongoing Sessions</Text>
+              <Text style={styles.sectionTitle}>Recent Sessions</Text>
               <View style={styles.ongoingWrapper}>
                 {classes && classes.length > 0 ? (
                   classes.map(item => (
@@ -328,7 +359,6 @@ export default function TeacherDashboard({
                 )}
               </View>
 
-              {/* --- LOWER PART: ASSIGNED SUBJECTS --- */}
               <Text style={[styles.sectionTitle, {marginTop: 25}]}>
                 Your Assigned Subjects
               </Text>
@@ -342,7 +372,7 @@ export default function TeacherDashboard({
                       onNavigate &&
                       onNavigate('add-class', {
                         initialSubject: item,
-                        teacherId: teacher.id,
+                        teacherId: teacher?.id,
                       })
                     }>
                     <View style={styles.subjectIcon}>
@@ -351,7 +381,7 @@ export default function TeacherDashboard({
                     <View style={{flex: 1}}>
                       <Text style={styles.subjectName}>{item.name}</Text>
                       <Text style={styles.subjectMeta}>
-                        {item.type} • Sem {item.target_semester}
+                        {item.type} â€¢ Sem {item.target_semester}
                       </Text>
                     </View>
                     <Plus color="#2196F3" size={20} />
@@ -372,13 +402,13 @@ export default function TeacherDashboard({
             <Image
               source={{
                 uri: `https://api.dicebear.com/9.x/initials/png?seed=${
-                  profile?.name || teacher.name
+                  profile?.name || teacher?.name || 'Faculty'
                 }&backgroundColor=2196F3&chars=2`,
               }}
               style={styles.bigAvatar}
             />
             <Text style={styles.bigName}>
-              {profile?.name || teacher.name || 'Loading Name...'}
+              {profile?.name || teacher?.name || 'Loading Name...'}
             </Text>
             <Text style={styles.roleText}>Faculty Member</Text>
           </View>
@@ -389,13 +419,13 @@ export default function TeacherDashboard({
               label="Faculty ID"
               value={
                 profile?.employee_id ||
-                `ID for ${teacher.id.substring(0, 5)}...`
+                `ID: ${(teacher?.id || 'FAC').substring(0, 8)}`
               }
             />
             <InfoRow
               icon={Mail}
               label="Email Address"
-              value={profile?.email || teacher.email}
+              value={profile?.email || teacher?.email || 'N/A'}
             />
             <InfoRow
               icon={Shield}
@@ -444,6 +474,7 @@ export default function TeacherDashboard({
             color={activeTab === 'dashboard' ? '#2196F3' : '#757575'}
           />
           <Text
+            numberOfLines={1}
             style={[
               styles.navText,
               activeTab === 'dashboard' && {color: '#2196F3'},
@@ -452,9 +483,28 @@ export default function TeacherDashboard({
           </Text>
         </TouchableOpacity>
 
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => setActiveTab('analytics')}>
+          <BarChart2
+            size={24}
+            color={activeTab === 'analytics' ? '#2196F3' : '#757575'}
+          />
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.navText,
+              activeTab === 'analytics' && {color: '#2196F3'},
+            ]}>
+            Analytics
+          </Text>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.navItem} onPress={handleReportClick}>
           <FileText size={24} color="#757575" />
-          <Text style={styles.navText}>Reports</Text>
+          <Text numberOfLines={1} style={styles.navText}>
+            Reports
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -465,6 +515,7 @@ export default function TeacherDashboard({
             color={activeTab === 'profile' ? '#2196F3' : '#757575'}
           />
           <Text
+            numberOfLines={1}
             style={[
               styles.navText,
               activeTab === 'profile' && {color: '#2196F3'},
@@ -490,17 +541,17 @@ const styles = StyleSheet.create({
   },
   headerTop: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justify: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
   },
-  headerTitle: {
-    color: '#FFF',
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginTop: 5,
+  profileRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginRight: 15,
   },
-  profileRow: {flexDirection: 'row', alignItems: 'center', gap: 12},
   avatar: {
     width: 48,
     height: 48,
@@ -573,7 +624,7 @@ const styles = StyleSheet.create({
   },
   cardHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justify: 'space-between',
     marginBottom: 15,
   },
   className: {
@@ -594,42 +645,33 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
     height: 24,
-    justifyContent: 'center',
+    justify: 'center',
   },
   statusText: {fontSize: 10, fontWeight: 'bold'},
   actionButton: {padding: 12, borderRadius: 8, alignItems: 'center'},
   actionButtonText: {fontWeight: 'bold', fontSize: 14},
   bottomNav: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    padding: 12,
+    alignItems: 'center',
+    paddingVertical: 8,
     backgroundColor: '#FFF',
     borderTopWidth: 1,
     borderTopColor: '#E0E0E0',
     position: 'absolute',
     bottom: 0,
-    width: '100%',
+    left: 0,
+    right: 0,
   },
-  navItem: {alignItems: 'center'},
-  navText: {fontSize: 12, color: '#757575', marginTop: 4},
-  centerContainer: {
+  navItem: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    paddingBottom: 50,
+    justify: 'center',
   },
-  placeholderText: {
-    fontSize: 18,
-    color: '#999',
-    marginTop: 15,
-    marginBottom: 20,
-  },
-  btnOutline: {
-    borderWidth: 1,
-    borderColor: '#2196F3',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
+  navText: {
+    fontSize: 12,
+    color: '#757575',
+    marginTop: 2,
+    textAlign: 'center',
   },
   profileContainer: {padding: 20, paddingBottom: 100},
   profileHeader: {alignItems: 'center', marginTop: 20, marginBottom: 40},
@@ -660,7 +702,7 @@ const styles = StyleSheet.create({
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justify: 'center',
     backgroundColor: '#FFEBEE',
     padding: 15,
     borderRadius: 12,

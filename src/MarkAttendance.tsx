@@ -27,6 +27,7 @@ import {manager, requestBluetoothPermissions} from './lib/ble';
 import Geolocation from 'react-native-geolocation-service';
 import {getDistanceFromLatLonInMeters} from './lib/location';
 import DeviceInfo from 'react-native-device-info';
+import ReactNativeBiometrics from 'react-native-biometrics';
 
 const SERVICE_UUID = '0000AD50-0000-1000-8000-00805F9B34FB';
 const SHORT_UUID = 'AD50';
@@ -293,11 +294,9 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
     const locPerm = await requestLocationPermission();
     if (locPerm) checkLocation(session?.gps_lat, session?.gps_long);
     else setGpsStatus('failed');
-    
   }, [classData.id, scanForTeacher]);
 
   const checkLocation = (targetLat: number, targetLong: number) => {
-
     setGpsStatus('checking');
     setGpsVerified(false);
     setCurrentDist(null);
@@ -391,7 +390,18 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
       return;
     }
 
-    // 2. Enforce Hardware Checks ONLY if required
+    // 2. Silently check for sensor availability in the background
+    const rnBiometrics = new ReactNativeBiometrics();
+    let isBiometricAvailable = false;
+
+    try {
+      const {available} = await rnBiometrics.isSensorAvailable();
+      isBiometricAvailable = available;
+    } catch (err) {
+      console.log('Biometric check error:', err);
+    }
+
+    // 3. Enforce Hardware Checks ONLY if required
     if (isHardwareRequired) {
       if (!bleFound) {
         Alert.alert(
@@ -404,8 +414,34 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
         Alert.alert('GPS Error', 'You are outside the classroom geofence.');
         return;
       }
+
+      // Prompt for fingerprint ONLY if hardware is required AND sensor is available
+      if (isBiometricAvailable) {
+        const {success} = await rnBiometrics.simplePrompt({
+          promptMessage: 'Confirm identity to mark attendance',
+          cancelButtonText: 'Cancel',
+        });
+
+        if (!success) {
+          Alert.alert(
+            'Authentication Failed',
+            'You must verify your identity to proceed.',
+          );
+          return;
+        }
+      } else {
+        Alert.alert(
+          'Notice',
+          'No biometrics detected. Attendance will be flaged to the teacher.',
+        );
+      }
+    } else {
+      if(!isBiometricAvailable) {
+        Alert.alert('Notice', 'Code accepted, but since biometric is missing attendance will be flagged')
+      }
     }
 
+    // 4. Submit to Database
     setLoading(true);
     try {
       const {
@@ -420,14 +456,20 @@ export default function MarkAttendance({classSession: classData, onBack}: any) {
         student_id: user.id,
         status: 'present',
         device_id: currentDeviceId,
-        verification_method: isHardwareRequired ? 'biometric' : 'code_only',
+        // Dynamically set the state based on both class settings and physical hardware
+        verification_method: isHardwareRequired
+          ? isBiometricAvailable
+            ? 'biometric'
+            : 'missing_sensor'
+          : isBiometricAvailable
+          ? 'code_only'
+          : 'co_&_missing_sensor',
         location_verified: gpsVerified,
         bluetooth_verified: bleFound,
       });
 
       if (error) {
         if (error.code === '23505') {
-          // Handle unique constraint
           setIsAlreadyMarked(true);
           setStep(2);
           return;

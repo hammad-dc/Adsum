@@ -20,7 +20,7 @@ import {
   X,
   User,
   LayoutDashboard,
-  Info,
+  BarChart2,
 } from 'lucide-react-native';
 import {supabase} from './lib/supabase';
 
@@ -78,7 +78,7 @@ export default function AcademicReports({teacherId, onBack}: any) {
         .from('sessions')
         .select(
           `
-          id, created_at,closed_at, target_batch, 
+          id, created_at, closed_at, target_batch, 
           attendance(count)
         `,
         )
@@ -105,6 +105,7 @@ export default function AcademicReports({teacherId, onBack}: any) {
       fetchSessionHistory(item.subject_id);
     }
   };
+
   const renderSubjectReport = (item: any) => {
     const hasSessions = item.total_sessions_held > 0;
     const totalPossible =
@@ -127,7 +128,7 @@ export default function AcademicReports({teacherId, onBack}: any) {
               {item.subject_name}
             </Text>
             <Text style={styles.subjectCode}>
-              {item.subject_code} • {item.subject_type}
+              {item.subject_code} â€¢ {item.subject_type}
             </Text>
           </View>
           <View
@@ -173,7 +174,6 @@ export default function AcademicReports({teacherId, onBack}: any) {
           />
         </View>
 
-        {/* Explanation Label */}
         <View style={styles.labelRow}>
           <Text style={styles.labelText}>
             {hasSessions
@@ -235,7 +235,7 @@ export default function AcademicReports({teacherId, onBack}: any) {
               {loadingHistory ? (
                 <ActivityIndicator color="#2196F3" />
               ) : (
-                sessionHistory.map((session, index) => (
+                sessionHistory.map((session) => (
                   <View key={session.id} style={styles.sessionRow}>
                     <View style={{marginBottom: 2}}>
                       <Text
@@ -270,7 +270,6 @@ export default function AcademicReports({teacherId, onBack}: any) {
                                 minute: '2-digit',
                               },
                             )}
-                            {/* Only show the end time if the session is closed */}
                             {session.closed_at &&
                               ' - ' +
                                 new Date(session.closed_at).toLocaleTimeString(
@@ -326,25 +325,33 @@ export default function AcademicReports({teacherId, onBack}: any) {
           </View>
         </View>
       </Modal>
-      {/* Standard Bottom Navigation */}
+
+      {/* 4-Button Bottom Navigation (Matches Dashboard & Analytics) */}
       <View style={styles.bottomNav}>
         <TouchableOpacity
           style={styles.navItem}
           onPress={() => onBack('dashboard')}>
-          <LayoutDashboard size={24} color="#757575" />
-          <Text style={styles.navText}>Dashboard</Text>
+          <LayoutDashboard size={22} color="#757575" />
+          <Text numberOfLines={1} style={styles.navText}>Dashboard</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => onBack('analytics')}>
+          <BarChart2 size={22} color="#757575" />
+          <Text numberOfLines={1} style={styles.navText}>Analytics</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.navItem}>
-          <FileText size={24} color="#2196F3" />
-          <Text style={[styles.navText, {color: '#2196F3'}]}>Reports</Text>
+          <FileText size={22} color="#2196F3" />
+          <Text numberOfLines={1} style={[styles.navText, {color: '#2196F3'}]}>Reports</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.navItem}
           onPress={() => onBack('profile')}>
-          <User size={24} color="#757575" />
-          <Text style={styles.navText}>Profile</Text>
+          <User size={22} color="#757575" />
+          <Text numberOfLines={1} style={styles.navText}>Profile</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -366,7 +373,7 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   headerTitle: {color: '#FFF', fontSize: 24, fontWeight: 'bold'},
-  scrollContent: {padding: 20, paddingTop: 25},
+  scrollContent: {padding: 20, paddingTop: 25, paddingBottom: 100},
   reportCard: {
     backgroundColor: '#FFF',
     borderRadius: 15,
@@ -453,15 +460,27 @@ const styles = StyleSheet.create({
   sessionCountText: {fontSize: 11, color: '#2196F3', fontWeight: 'bold'},
   bottomNav: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    padding: 12,
+    alignItems: 'center',
+    paddingVertical: 8,
     backgroundColor: '#FFF',
     borderTopWidth: 1,
     borderTopColor: '#E0E0E0',
     position: 'absolute',
     bottom: 0,
-    width: '100%',
+    left: 0,
+    right: 0,
   },
-  navItem: {alignItems: 'center'},
-  navText: {fontSize: 12, color: '#757575', marginTop: 4},
+  navItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navText: {
+    fontSize: 10,
+    color: '#757575',
+    marginTop: 2,
+    textAlign: 'center',
+  },
 });
+
+

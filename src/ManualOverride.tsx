@@ -98,10 +98,15 @@ export default function ManualOverride({
           const isPresent = !!attendanceRecord;
           const isManual = attendanceRecord?.verification_method === 'manual';
 
+          const isMissingBiometrics =
+            attendanceRecord?.verification_method === 'missing_sensor' ||
+            attendanceRecord?.verification_method === 'co_&_missing_sensor';
+
           return {
             ...s,
             isPresent,
-            isManual, // Add this flag to the UI
+            isManual,
+            isMissingBiometrics,
             // Ignore proxy alert if the teacher marked them manually
             isProxySuspected:
               isPresent &&
@@ -257,6 +262,31 @@ export default function ManualOverride({
                 }}>
                 <Info size={16} color="#FF9800" />
                 <Text style={styles.proxyText}>Proxy?</Text>
+              </TouchableOpacity>
+            )}
+            {/* Missing Biometrics Flag */}
+            {item.isMissingBiometrics && (
+              <TouchableOpacity
+                style={[
+                  styles.proxyBadge,
+                  {
+                    marginRight: 0,
+                    marginTop: 2,
+                    backgroundColor: '#FFF3E0',
+                    borderColor: '#FF9800',
+                  },
+                ]}
+                onPress={() => {
+                  Alert.alert(
+                    'No Biometrics',
+                    'This student marked attendance but their device lacks a biometric sensor.',
+                    [{text: 'Understood', style: 'default'}],
+                  );
+                }}>
+                <AlertTriangle size={16} color="#FF9800" />
+                <Text style={[styles.proxyText, {color: '#FF9800'}]}>
+                  No Sensor
+                </Text>
               </TouchableOpacity>
             )}
           </View>
